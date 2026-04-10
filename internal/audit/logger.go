@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 type Logger struct {

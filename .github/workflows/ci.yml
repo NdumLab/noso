@@ -95,9 +95,9 @@ jobs:
           VERSION="${GITHUB_REF_NAME}"
           COMMIT="${GITHUB_SHA::8}"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          LDFLAGS="-X github.com/noso-dev/noso/pkg/buildinfo.Version=${VERSION} \
-                   -X github.com/noso-dev/noso/pkg/buildinfo.Commit=${COMMIT} \
-                   -X github.com/noso-dev/noso/pkg/buildinfo.Date=${DATE}"
+          LDFLAGS="-X github.com/NdumLab/noso/pkg/buildinfo.Version=${VERSION} \
+                   -X github.com/NdumLab/noso/pkg/buildinfo.Commit=${COMMIT} \
+                   -X github.com/NdumLab/noso/pkg/buildinfo.Date=${DATE}"
           mkdir -p dist
           for GOARCH in amd64 arm64; do
             OUT="dist/cli-helper-linux-${GOARCH}"

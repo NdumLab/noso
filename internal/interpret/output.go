@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/noso-dev/noso/internal/safety"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/safety"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func Output(command string, text string) (models.Response, error) {

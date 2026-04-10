@@ -3,8 +3,8 @@ package registry
 import (
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func TestAWSIdentityIntent(t *testing.T) {

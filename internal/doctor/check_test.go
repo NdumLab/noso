@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/internal/config"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/config"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func allCoreCommandsPresent() map[string]models.CommandInfo {

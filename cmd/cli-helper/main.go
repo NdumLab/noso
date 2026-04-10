@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/noso-dev/noso/internal/cli"
+	"github.com/NdumLab/noso/internal/cli"
 )
 
 func main() {

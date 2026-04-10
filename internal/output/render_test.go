@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func TestRenderResponseText(t *testing.T) {

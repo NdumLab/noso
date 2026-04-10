@@ -20,9 +20,9 @@ VERSION="${VERSION:-dev}"
 COMMIT="${COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 DATE="${DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
-LDFLAGS="-X github.com/noso-dev/noso/pkg/buildinfo.Version=${VERSION} \
-         -X github.com/noso-dev/noso/pkg/buildinfo.Commit=${COMMIT} \
-         -X github.com/noso-dev/noso/pkg/buildinfo.Date=${DATE}"
+LDFLAGS="-X github.com/NdumLab/noso/pkg/buildinfo.Version=${VERSION} \
+         -X github.com/NdumLab/noso/pkg/buildinfo.Commit=${COMMIT} \
+         -X github.com/NdumLab/noso/pkg/buildinfo.Date=${DATE}"
 
 OUT="${ROOT}/bin/cli-helper"
 mkdir -p "${ROOT}/bin"

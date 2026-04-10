@@ -8,17 +8,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/noso-dev/noso/internal/audit"
-	"github.com/noso-dev/noso/internal/config"
-	"github.com/noso-dev/noso/internal/detect"
-	"github.com/noso-dev/noso/internal/doctor"
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/internal/history"
-	"github.com/noso-dev/noso/internal/interpret"
-	"github.com/noso-dev/noso/internal/output"
-	"github.com/noso-dev/noso/internal/registry"
-	"github.com/noso-dev/noso/internal/runbook"
-	"github.com/noso-dev/noso/pkg/buildinfo"
+	"github.com/NdumLab/noso/internal/audit"
+	"github.com/NdumLab/noso/internal/config"
+	"github.com/NdumLab/noso/internal/detect"
+	"github.com/NdumLab/noso/internal/doctor"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/history"
+	"github.com/NdumLab/noso/internal/interpret"
+	"github.com/NdumLab/noso/internal/output"
+	"github.com/NdumLab/noso/internal/registry"
+	"github.com/NdumLab/noso/internal/runbook"
+	"github.com/NdumLab/noso/pkg/buildinfo"
 )
 
 // Exit codes used by the CLI.  Scripts can branch on these.

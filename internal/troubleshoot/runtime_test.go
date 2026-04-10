@@ -3,7 +3,7 @@ package troubleshoot
 import (
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/evidence"
 )
 
 func TestRuntimeUnhealthyTroubleshoot(t *testing.T) {

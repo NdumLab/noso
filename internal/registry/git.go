@@ -1,9 +1,9 @@
 package registry
 
 import (
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/internal/safety"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/safety"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func gitStatusIntent(env models.Environment, collector evidence.Collector) (models.Response, error) {

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 // FuzzResolve verifies that Resolve never panics, always returns a

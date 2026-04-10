@@ -1,3 +1,3 @@
-module github.com/noso-dev/noso
+module github.com/NdumLab/noso
 
 go 1.22

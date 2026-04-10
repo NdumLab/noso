@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func TestAppendCreatesFileWithCorrectPermissions(t *testing.T) {

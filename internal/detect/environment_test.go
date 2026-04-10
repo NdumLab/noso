@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/evidence"
 )
 
 func TestDistroFamily(t *testing.T) {

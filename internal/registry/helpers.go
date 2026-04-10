@@ -1,8 +1,8 @@
 package registry
 
 import (
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 // confidenceFor scores evidence quality from multiple local sources.

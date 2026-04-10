@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/noso-dev/noso/internal/config"
-	"github.com/noso-dev/noso/internal/safety"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/config"
+	"github.com/NdumLab/noso/internal/safety"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 var coreCommands = []string{"bash", "systemctl", "ss", "find", "git"}

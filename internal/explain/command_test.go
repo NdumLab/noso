@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/evidence"
 )
 
 func TestExplainDangerousGitReset(t *testing.T) {

@@ -4,11 +4,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/noso-dev/noso/internal/evidence"
-	"github.com/noso-dev/noso/internal/explain"
-	"github.com/noso-dev/noso/internal/safety"
-	"github.com/noso-dev/noso/internal/troubleshoot"
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/explain"
+	"github.com/NdumLab/noso/internal/safety"
+	"github.com/NdumLab/noso/internal/troubleshoot"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 var (

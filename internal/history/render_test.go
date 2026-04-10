@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func TestRenderText(t *testing.T) {

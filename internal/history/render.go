@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func Render(records []models.AuditRecord, asJSON bool) (string, error) {

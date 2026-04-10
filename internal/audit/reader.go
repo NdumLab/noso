@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/noso-dev/noso/pkg/models"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 func ReadAll(path string) ([]models.AuditRecord, error) {

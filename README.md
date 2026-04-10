@@ -19,14 +19,14 @@ Next step:    Run journalctl -u <service> if the owning process is a systemd uni
 
 ```bash
 # amd64
-curl -Lo cli-helper https://github.com/noso-dev/noso/releases/latest/download/cli-helper-linux-amd64
+curl -Lo cli-helper https://github.com/NdumLab/noso/releases/latest/download/cli-helper-linux-amd64
 chmod +x cli-helper
 sudo mv cli-helper /usr/local/bin/
 ```
 
 ```bash
 # arm64
-curl -Lo cli-helper https://github.com/noso-dev/noso/releases/latest/download/cli-helper-linux-arm64
+curl -Lo cli-helper https://github.com/NdumLab/noso/releases/latest/download/cli-helper-linux-arm64
 chmod +x cli-helper
 sudo mv cli-helper /usr/local/bin/
 ```
@@ -34,7 +34,7 @@ sudo mv cli-helper /usr/local/bin/
 Verify the download matches the published checksum:
 
 ```bash
-curl -sL https://github.com/noso-dev/noso/releases/latest/download/SHA256SUMS | sha256sum --check --ignore-missing
+curl -sL https://github.com/NdumLab/noso/releases/latest/download/SHA256SUMS | sha256sum --check --ignore-missing
 ```
 
 ### Install with `go install`
@@ -42,7 +42,7 @@ curl -sL https://github.com/noso-dev/noso/releases/latest/download/SHA256SUMS | 
 Requires Go 1.22 or later.
 
 ```bash
-go install github.com/noso-dev/noso/cmd/cli-helper@latest
+go install github.com/NdumLab/noso/cmd/cli-helper@latest
 ```
 
 ### Build from source
@@ -50,7 +50,7 @@ go install github.com/noso-dev/noso/cmd/cli-helper@latest
 Requires Go 1.22 or later.
 
 ```bash
-git clone https://github.com/noso-dev/noso
+git clone https://github.com/NdumLab/noso
 cd noso
 go build -o cli-helper ./cmd/cli-helper
 ```

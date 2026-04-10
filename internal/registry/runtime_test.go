@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/noso-dev/noso/internal/evidence"
+	"github.com/NdumLab/noso/internal/evidence"
 )
 
 func TestRuntimeStatusIntentDocker(t *testing.T) {
