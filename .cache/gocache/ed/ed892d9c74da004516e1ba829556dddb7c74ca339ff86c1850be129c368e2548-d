@@ -1,0 +1,21 @@
+# test log
+getenv GOTMPDIR
+getenv TMPDIR
+stat /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state/noso
+stat /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state
+stat /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001
+open /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state/noso/audit.log
+stat /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state/noso/audit.log
+stat /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state/noso
+open /tmp/TestAppendCreatesFileWithCorrectPermissions1149353971/001/state/noso/audit.log
+open /tmp
+getenv GOTMPDIR
+getenv TMPDIR
+open /tmp/TestReadAllSkipsMalformedLines58033935/001/audit.log
+open /tmp/TestReadAllSkipsMalformedLines58033935/001/audit.log
+open /tmp
+getenv GOTMPDIR
+getenv TMPDIR
+open /tmp/TestReadAllAndFilter1307951620/001/audit.log
+open /tmp/TestReadAllAndFilter1307951620/001/audit.log
+open /tmp

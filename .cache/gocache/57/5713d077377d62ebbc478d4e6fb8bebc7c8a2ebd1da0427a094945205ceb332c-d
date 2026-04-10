@@ -1,0 +1,4 @@
+covervars.go
+templates.cover.go
+./runtime_test.go
+./templates_test.go

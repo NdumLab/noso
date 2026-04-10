@@ -1,0 +1,26 @@
+mode: atomic
+noso/internal/output/render.go:13.88,14.12 1 3
+noso/internal/output/render.go:14.12,16.17 2 1
+noso/internal/output/render.go:16.17,18.4 1 0
+noso/internal/output/render.go:19.3,19.34 1 1
+noso/internal/output/render.go:22.2,29.36 8 2
+noso/internal/output/render.go:29.36,31.3 1 1
+noso/internal/output/render.go:32.2,32.12 1 2
+noso/internal/output/render.go:32.12,33.43 1 1
+noso/internal/output/render.go:33.43,35.4 1 1
+noso/internal/output/render.go:36.3,36.45 1 1
+noso/internal/output/render.go:36.45,38.4 1 0
+noso/internal/output/render.go:40.2,40.24 1 2
+noso/internal/output/render.go:44.77,45.12 1 2
+noso/internal/output/render.go:45.12,47.17 2 1
+noso/internal/output/render.go:47.17,49.4 1 0
+noso/internal/output/render.go:50.3,50.34 1 1
+noso/internal/output/render.go:53.2,58.26 6 1
+noso/internal/output/render.go:58.26,60.3 1 0
+noso/internal/output/render.go:61.2,61.27 1 1
+noso/internal/output/render.go:61.27,63.3 1 0
+noso/internal/output/render.go:64.2,72.4 1 1
+noso/internal/output/render.go:72.4,75.17 3 39
+noso/internal/output/render.go:75.17,77.4 1 1
+noso/internal/output/render.go:78.3,78.43 1 39
+noso/internal/output/render.go:80.2,80.24 1 1

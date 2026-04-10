@@ -1,0 +1,15 @@
+mode: atomic
+noso/internal/history/render.go:11.72,12.12 1 6
+noso/internal/history/render.go:12.12,14.17 2 1
+noso/internal/history/render.go:14.17,16.4 1 0
+noso/internal/history/render.go:17.3,17.34 1 1
+noso/internal/history/render.go:20.2,20.23 1 5
+noso/internal/history/render.go:20.23,22.3 1 1
+noso/internal/history/render.go:24.2,25.33 2 4
+noso/internal/history/render.go:25.33,28.36 3 5
+noso/internal/history/render.go:28.36,30.4 1 1
+noso/internal/history/render.go:31.3,32.40 2 5
+noso/internal/history/render.go:32.40,34.4 1 1
+noso/internal/history/render.go:35.3,35.25 1 5
+noso/internal/history/render.go:35.25,37.4 1 1
+noso/internal/history/render.go:39.2,39.24 1 4

@@ -1,0 +1,82 @@
+//line /opt/noso/internal/runbook/build.go:1:1
+package runbook; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/pkg/models"
+)
+
+type Report struct {
+	Title       string   `json:"title"`
+	Summary     string   `json:"summary"`
+	Queries     []string `json:"queries"`
+	Commands    []string `json:"commands"`
+	Findings    []string `json:"findings"`
+	Warnings    []string `json:"warnings,omitempty"`
+	NextSteps   []string `json:"next_steps,omitempty"`
+	RecordsUsed int      `json:"records_used"`
+}
+
+func Build(records []models.AuditRecord) Report {_cover_atomic_.StoreUint32(&goCover_80de5a641882__0[0], 14) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__0[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__0[3], 1);
+	records = meaningful(records)
+	report := Report{
+		Title:       "Runbook Summary",
+		Summary:     "No matching audit records were found.",
+		RecordsUsed: len(records),
+	}
+	if len(records) == 0 {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[7], 1);
+		return report
+	}
+
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__0[4], 1);report.Title = "Runbook: " + records[0].Query
+	report.Summary = fmt.Sprintf("Generated from %d audit record(s). The most recent focus was: %s", len(records), records[0].Query)
+
+	for _, record := range records {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[8], 1);
+		report.Queries = appendUnique(report.Queries, record.Query)
+		if record.Response.Command != "" {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[12], 1);
+			report.Commands = appendUnique(report.Commands, record.Response.Command)
+		}
+		_cover_atomic_.AddUint32(&goCover_80de5a641882__0[9], 1);if record.Response.Explanation != "" {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[13], 1);
+			report.Findings = appendUnique(report.Findings, record.Response.Explanation)
+		}
+		_cover_atomic_.AddUint32(&goCover_80de5a641882__0[10], 1);for _, warning := range record.Response.Warnings {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[14], 1);
+			report.Warnings = appendUnique(report.Warnings, warning)
+		}
+		_cover_atomic_.AddUint32(&goCover_80de5a641882__0[11], 1);for _, step := range record.Response.NextSteps {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[15], 1);
+			report.NextSteps = appendUnique(report.NextSteps, step)
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__0[5], 1);if len(report.NextSteps) == 0 {_cover_atomic_.AddUint32(&goCover_80de5a641882__0[16], 1);
+		report.NextSteps = append(report.NextSteps, "Re-run the most relevant safe inspection command from the session to confirm current state.")
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__0[6], 1);return report
+}
+
+func meaningful(records []models.AuditRecord) []models.AuditRecord {_cover_atomic_.StoreUint32(&goCover_80de5a641882__1[0], 5) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__1[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__1[3], 1);
+	var filtered []models.AuditRecord
+	for _, record := range records {_cover_atomic_.AddUint32(&goCover_80de5a641882__1[5], 1);
+		if record.Response.IntentID == "unsupported_query" {_cover_atomic_.AddUint32(&goCover_80de5a641882__1[7], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_80de5a641882__1[6], 1);filtered = append(filtered, record)
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__1[4], 1);return filtered
+}
+
+func appendUnique(values []string, value string) []string {_cover_atomic_.StoreUint32(&goCover_80de5a641882__2[0], 6) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__2[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__2[3], 1);
+	value = strings.TrimSpace(value)
+	if value == "" {_cover_atomic_.AddUint32(&goCover_80de5a641882__2[6], 1);
+		return values
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__2[4], 1);for _, existing := range values {_cover_atomic_.AddUint32(&goCover_80de5a641882__2[7], 1);
+		if existing == value {_cover_atomic_.AddUint32(&goCover_80de5a641882__2[8], 1);
+			return values
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__2[5], 1);return append(values, value)
+}
+
+var _ = _cover_atomic_.LoadUint32

@@ -1,0 +1,6 @@
+# test log
+getenv GOTMPDIR
+getenv TMPDIR
+open /tmp/TestReadAllAndFilter2687834585/001/audit.log
+open /tmp/TestReadAllAndFilter2687834585/001/audit.log
+open /tmp

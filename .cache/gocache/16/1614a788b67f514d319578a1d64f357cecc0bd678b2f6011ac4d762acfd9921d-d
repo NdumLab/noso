@@ -1,0 +1,115 @@
+//line /opt/noso/internal/config/config.go:1:1
+package config; import _cover_atomic_ "sync/atomic"
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+type Config struct {
+	Mode         string `json:"mode"`
+	AuditLogPath string `json:"audit_log_path"`
+}
+
+var validModes = map[string]bool{
+	"strict-local":    true,
+	"local-preferred": true,
+}
+
+// Validate returns an error if the config contains unsupported field values.
+func (c Config) Validate() error {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__0[0], 3) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__0[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__0[3], 1);
+	if !validModes[c.Mode] {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__0[5], 1);
+		return fmt.Errorf("invalid mode %q: must be one of: strict-local, local-preferred", c.Mode)
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__0[4], 1);return nil
+}
+
+func Load() (Config, error) {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__1[0], 13) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__1[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[3], 1);
+	cfg := defaultConfig()
+
+	if filePath := configFilePath(); filePath != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[8], 1);
+		if data, err := os.ReadFile(filePath); err == nil {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[9], 1);
+			if err := json.Unmarshal(data, &cfg); err != nil {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[10], 1);
+				return Config{}, fmt.Errorf("config file is not valid JSON: %w", err)
+			}
+		} else{ _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[11], 1);if !errors.Is(err, os.ErrNotExist) {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[12], 1);
+			return Config{}, err
+		}}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[4], 1);if v := os.Getenv("NOSO_MODE"); v != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[13], 1);
+		cfg.Mode = v
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[5], 1);if v := os.Getenv("NOSO_AUDIT_LOG_PATH"); v != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[14], 1);
+		cfg.AuditLogPath = v
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[6], 1);if err := cfg.Validate(); err != nil {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[15], 1);
+		return Config{}, err
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__1[7], 1);return cfg, nil
+}
+
+func defaultConfig() Config {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__2[0], 1) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__2[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__2[3], 1);
+	return Config{
+		Mode:         "strict-local",
+		AuditLogPath: defaultAuditLogPath(),
+	}
+}
+
+func defaultAuditLogPath() string {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__3[0], 8) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__3[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[3], 1);
+	candidates := []string{}
+	if stateHome := os.Getenv("XDG_STATE_HOME"); stateHome != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[7], 1);
+		candidates = append(candidates, filepath.Join(stateHome, "noso", "audit.log"))
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[4], 1);if home, err := os.UserHomeDir(); err == nil && home != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[8], 1);
+		candidates = append(candidates, filepath.Join(home, ".local", "state", "noso", "audit.log"))
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[5], 1);candidates = append(candidates, filepath.Join(os.TempDir(), "noso", "audit.log"))
+
+	for _, candidate := range candidates {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[9], 1);
+		if AuditPathUsable(candidate) {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[10], 1);
+			return candidate
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__3[6], 1);return filepath.Join(os.TempDir(), "noso", "audit.log")
+}
+
+func AuditPathUsable(path string) bool {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__4[0], 5) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__4[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__4[3], 1);
+	dir := filepath.Dir(path)
+	// Use 0o700 so that any newly-created probe directory is already private.
+	// The logger will enforce this again on first write.
+	if err := os.MkdirAll(dir, 0o700); err != nil {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__4[6], 1);
+		return false
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__4[4], 1);f, err := os.CreateTemp(dir, ".noso-audit-check-*")
+	if err != nil {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__4[7], 1);
+		return false
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__4[5], 1);name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
+}
+
+func configFilePath() string {_cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__5[0], 7) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__5[1], goCover_8f9ee56b6338_P) ; _cover_atomic_.StoreUint32(&goCover_8f9ee56b6338__5[2], 5) ; _cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[3], 1);
+	if v := os.Getenv("NOSO_CONFIG"); v != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[7], 1);
+		return v
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[4], 1);if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[8], 1);
+		return filepath.Join(v, "noso", "config.json")
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[5], 1);home, err := os.UserHomeDir()
+	if err != nil || home == "" {_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[9], 1);
+		return ""
+	}
+	_cover_atomic_.AddUint32(&goCover_8f9ee56b6338__5[6], 1);return filepath.Join(home, ".config", "noso", "config.json")
+}
+
+var _ = _cover_atomic_.LoadUint32

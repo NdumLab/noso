@@ -1,0 +1,11 @@
+# test log
+getenv GOTMPDIR
+getenv TMPDIR
+stat /tmp/TestCheckWarnsForMissingCoreCommands3260248641/001
+open /tmp/TestCheckWarnsForMissingCoreCommands3260248641/001/.noso-audit-check-1113543433
+open /tmp
+getenv GOTMPDIR
+getenv TMPDIR
+stat /tmp/TestCheckHealthyRHEL9Host1247944956/001
+open /tmp/TestCheckHealthyRHEL9Host1247944956/001/.noso-audit-check-3648561792
+open /tmp

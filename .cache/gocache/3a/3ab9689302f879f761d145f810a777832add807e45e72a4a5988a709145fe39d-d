@@ -1,0 +1,172 @@
+//line /opt/noso/internal/evidence/collector.go:1:1
+package evidence; import _cover_atomic_ "sync/atomic"
+
+import (
+	"bytes"
+	"context"
+	"os"
+	"os/exec"
+	"strings"
+	"time"
+)
+
+// Evidence holds what the collector learned about a command from local sources.
+type Evidence struct {
+	CommandName         string
+	Exists              bool
+	Path                string
+	Kind                string
+	HelpSnippet         []string
+	ManAvailable        bool
+	CompletionPath      string
+	VerificationSources []string
+}
+
+// Collector runs local probes with a bounded timeout.
+type Collector struct {
+	timeout time.Duration
+}
+
+func NewCollector() Collector {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__0[0], 1) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__0[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__0[3], 1);
+	return Collector{timeout: 2 * time.Second}
+}
+
+// Lookup probes the local system for information about name.
+// name must come from trusted/internal code, not raw user input.
+func (c Collector) Lookup(name string) Evidence {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__1[0], 14) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__1[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[3], 1);
+	ev := Evidence{CommandName: name}
+
+	// exec.LookPath replaces bash -c "command -v name" — no shell involved.
+	if path, err := exec.LookPath(name); err == nil {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[9], 1);
+		ev.Exists = true
+		ev.Path = path
+		ev.Kind = "file"
+		ev.VerificationSources = append(ev.VerificationSources, "exec.LookPath")
+	} else{ _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[10], 1);if isKnownBuiltin(name) {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[11], 1);
+		ev.Exists = true
+		ev.Kind = "builtin"
+		ev.VerificationSources = append(ev.VerificationSources, "builtin")
+	}}
+
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[4], 1);if !ev.Exists {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[12], 1);
+		return ev
+	}
+
+	// Short help snippet for confidence scoring and flag verification.
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[5], 1);if snippet := c.helpSnippet(name, ev.Kind, ev.Path); len(snippet) > 0 {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[13], 1);
+		ev.HelpSnippet = snippet
+		ev.VerificationSources = append(ev.VerificationSources, name+" --help")
+	}
+
+	// man -w just prints the path — fast, no rendering.
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[6], 1);if c.outputContainsSubstr("man", []string{"-w", name}, "/") {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[14], 1);
+		ev.ManAvailable = true
+		ev.VerificationSources = append(ev.VerificationSources, "man")
+	}
+
+	// Shell completion script.
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[7], 1);for _, dir := range []string{
+		"/usr/share/bash-completion/completions",
+		"/etc/bash_completion.d",
+	} {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[15], 1);
+		p := dir + "/" + name
+		if _, err := os.Stat(p); err == nil {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[16], 1);
+			ev.CompletionPath = p
+			ev.VerificationSources = append(ev.VerificationSources, "completion-script")
+			break
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__1[8], 1);return ev
+}
+
+func (c Collector) helpSnippet(name, kind, path string) []string {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__2[0], 8) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__2[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[3], 1);
+	if kind == "builtin" {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[6], 1);
+		// Shell builtins require bash; name is from our hardcoded list.
+		if lines := c.runDirect("bash", []string{"-c", "help " + name}); len(lines) > 0 {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[8], 1);
+			return firstN(lines, 3)
+		}
+		_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[7], 1);return nil
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[4], 1);for _, flag := range []string{"--help", "-h"} {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[9], 1);
+		if lines := c.runDirect(path, []string{flag}); len(lines) > 0 {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[10], 1);
+			return firstN(lines, 3)
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__2[5], 1);return nil
+}
+
+// outputContainsSubstr runs cmd with args and returns true if output contains substr.
+func (c Collector) outputContainsSubstr(cmd string, args []string, substr string) bool {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__3[0], 4) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__3[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__3[3], 1);
+	for _, l := range c.runDirect(cmd, args) {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__3[5], 1);
+		if strings.Contains(l, substr) {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__3[6], 1);
+			return true
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__3[4], 1);return false
+}
+
+// runDirect executes a command directly without a shell intermediary.
+// Many --help invocations exit non-zero; we still capture their output.
+func (c Collector) runDirect(name string, args []string) []string {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__4[0], 4) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__4[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__4[3], 1);
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	_ = cmd.Run()
+
+	var lines []string
+	for _, line := range strings.Split(buf.String(), "\n") {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__4[5], 1);
+		if t := strings.TrimSpace(line); t != "" {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__4[6], 1);
+			lines = append(lines, t)
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__4[4], 1);return lines
+}
+
+// RunLinesForDetection executes a fully-hardcoded shell script (e.g.
+// "kubectl config current-context") and returns its output lines.
+// Never pass user-supplied input to this function.
+func (c Collector) RunLinesForDetection(script string) []string {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__5[0], 6) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__5[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__5[2], 5) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[3], 1);
+	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "bash", "-lc", script)
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[6], 1);
+		return nil
+	}
+
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[4], 1);var lines []string
+	for _, line := range strings.Split(buf.String(), "\n") {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[7], 1);
+		if t := strings.TrimSpace(line); t != "" {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[8], 1);
+			lines = append(lines, t)
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__5[5], 1);return lines
+}
+
+// isKnownBuiltin returns true for bash shell builtins noso may document.
+func isKnownBuiltin(name string) bool {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__6[0], 3) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__6[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__6[2], 6) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__6[3], 1);
+	switch name {
+	case "cd", "echo", "test", "read", "export", "source", "alias",
+		"unalias", "pwd", "set", "unset", "trap", "type", "help",
+		"true", "false", "exit", "return", "break", "continue":_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__6[5], 1);
+		return true
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__6[4], 1);return false
+}
+
+func firstN(lines []string, n int) []string {_cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__7[0], 3) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__7[1], goCover_8e40c24a16f0_P) ; _cover_atomic_.StoreUint32(&goCover_8e40c24a16f0__7[2], 7) ; _cover_atomic_.AddUint32(&goCover_8e40c24a16f0__7[3], 1);
+	if len(lines) <= n {_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__7[5], 1);
+		return lines
+	}
+	_cover_atomic_.AddUint32(&goCover_8e40c24a16f0__7[4], 1);return lines[:n]
+}
+
+var _ = _cover_atomic_.LoadUint32

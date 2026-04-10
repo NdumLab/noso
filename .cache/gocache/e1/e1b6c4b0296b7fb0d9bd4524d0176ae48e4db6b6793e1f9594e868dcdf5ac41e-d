@@ -1,0 +1,469 @@
+//line /opt/noso/internal/interpret/output.go:1:1
+package interpret; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"math"
+	"strconv"
+	"strings"
+
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func Output(command string, text string) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__0[0], 11) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__0[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[3], 1);
+	command = strings.TrimSpace(command)
+	text = strings.TrimSpace(text)
+	if command == "" {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[5], 1);
+		return models.Response{}, fmt.Errorf("command is required")
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[4], 1);lower := strings.ToLower(command)
+	switch {
+	case strings.HasPrefix(lower, "systemctl status"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[6], 1);
+		return interpretSystemctlStatus(command, text), nil
+	case strings.HasPrefix(lower, "df "):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[7], 1);
+		return interpretDF(command, text), nil
+	case strings.HasPrefix(lower, "free "):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[8], 1);
+		return interpretFree(command, text), nil
+	case strings.HasPrefix(lower, "kubectl get pods"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[9], 1);
+		return interpretKubectlGetPods(command, text), nil
+	case strings.HasPrefix(lower, "journalctl"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[10], 1);
+		return interpretJournalctl(command, text), nil
+	case strings.HasPrefix(lower, "ps "):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[11], 1);
+		return interpretPS(command, text), nil
+	case strings.HasPrefix(lower, "ip addr"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[12], 1);
+		return interpretIPAddr(command, text), nil
+	default:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__0[13], 1);
+		return models.Response{
+			IntentID:       "interpret_unsupported_output",
+			Command:        command,
+			Explanation:    "This command output does not have a dedicated interpreter yet. The pasted output was accepted, but only limited generic interpretation is available.",
+			ExpectedOutput: "A concise explanation of pasted command output once support is added for this command.",
+			Risk:           safety.RiskLow,
+			Confidence:     "Low",
+			Warnings:       []string{"no dedicated interpreter exists yet for this command"},
+		}, nil
+	}
+}
+
+func interpretSystemctlStatus(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__1[0], 8) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__1[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[3], 1);
+	lower := strings.ToLower(text)
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_systemctl_status"
+	response.ExpectedOutput = "A summary of unit health, failure signals, and the next safe diagnostics to run."
+
+	switch {
+	case strings.Contains(lower, "active: failed"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[6], 1);
+		response.Explanation = "The unit is in a failed state. systemd recorded a service failure rather than a healthy running process."
+		response.Confidence = "High"
+		response.NextSteps = []string{
+			"Run `journalctl -u <service> -n 50 --no-pager` to inspect the most recent failure logs.",
+			"Run `systemctl show <service> -p ExecMainStatus -p Result` to confirm the exit status and result reason.",
+		}
+	case strings.Contains(lower, "active: active (running)"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[7], 1);
+		response.Explanation = "The unit appears healthy and running. The pasted status output does not indicate a current service failure."
+		response.Confidence = "High"
+		response.NextSteps = []string{
+			"Inspect recent logs with `journalctl -u <service> -n 50 --no-pager` if the application still behaves incorrectly.",
+		}
+	case strings.Contains(lower, "active: inactive (dead)"):_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[8], 1);
+		response.Explanation = "The unit is inactive and not currently running. That may be expected for one-shot units, but it usually means the service is stopped."
+		response.Confidence = "High"
+		response.NextSteps = []string{
+			"Check whether the unit should normally stay active with `systemctl cat <service>`.",
+			"Inspect the prior logs with `journalctl -u <service> -n 50 --no-pager`.",
+		}
+	default:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[9], 1);
+		response.Explanation = "The pasted systemctl output was recognized, but the current parser could not confidently classify the unit as running, failed, or inactive."
+		response.Confidence = "Medium"
+		response.NextSteps = []string{
+			"Look for the `Active:` and `Result:` lines in the pasted status output.",
+			"Use `journalctl -u <service> -n 50 --no-pager` for more detail if the unit is unhealthy.",
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[4], 1);if strings.Contains(lower, "result: exit-code") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[10], 1);
+		response.NextSteps = appendUnique(response.NextSteps, "The unit exited with a non-zero code; inspect the command or startup script that systemd launched.")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__1[5], 1);return response
+}
+
+func interpretDF(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__2[0], 16) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__2[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_df"
+	response.ExpectedOutput = "A summary of filesystem capacity pressure and any mounts that are close to full."
+
+	var hot []string
+	var parsed int
+	for _, line := range strings.Split(text, "\n") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[6], 1);
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "Filesystem") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[10], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[7], 1);fields := strings.Fields(line)
+		if len(fields) < 6 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[11], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[8], 1);parsed++
+		use := strings.TrimSuffix(fields[4], "%")
+		pct, err := strconv.Atoi(use)
+		if err != nil {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[12], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[9], 1);if pct >= 90 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[13], 1);
+			hot = append(hot, fmt.Sprintf("%s at %d%% on %s", fields[0], pct, fields[len(fields)-1]))
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[4], 1);switch {
+	case parsed == 0:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[14], 1);
+		response.Explanation = "The pasted output did not look like standard `df` output, so no filesystem-capacity interpretation was possible."
+		response.Confidence = "Low"
+		response.Warnings = []string{"unable to parse filesystem rows from provided output"}
+	case len(hot) > 0:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[15], 1);
+		response.Explanation = "At least one filesystem is close to full. Capacity pressure is likely to affect writes, package installs, logs, or service startup on those mounts."
+		response.Confidence = "High"
+		for _, item := range hot {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[18], 1);
+			response.NextSteps = append(response.NextSteps, "Investigate "+item)
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[16], 1);response.NextSteps = append(response.NextSteps,
+			"Run `du -sh <mount>/* | sort -h` on the affected mount to find large directories.",
+		)
+	default:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[17], 1);
+		response.Explanation = "No parsed filesystem in the pasted output is above the 90% usage threshold, so there is no obvious critical disk-pressure signal."
+		response.Confidence = "High"
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__2[5], 1);return response
+}
+
+func interpretFree(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__3[0], 13) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__3[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_free"
+	response.ExpectedOutput = "A summary of memory pressure based on total versus available memory and swap usage."
+
+	for _, line := range strings.Split(text, "\n") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[5], 1);
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Mem:") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[10], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[6], 1);fields := strings.Fields(line)
+		if len(fields) < 7 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[11], 1);
+			break
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[7], 1);total, okTotal := parseHumanBytes(fields[1])
+		available, okAvail := parseHumanBytes(fields[6])
+		if !okTotal || !okAvail || total == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[12], 1);
+			break
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[8], 1);availablePct := (float64(available) / float64(total)) * 100
+		switch {
+		case availablePct < 10:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[13], 1);
+			response.Explanation = fmt.Sprintf("The host appears to be under memory pressure. Only about %.0f%% of memory is currently available.", math.Round(availablePct))
+			response.Confidence = "High"
+			response.NextSteps = []string{
+				"Run `ps aux --sort=-%mem | head` to identify memory-heavy processes.",
+				"Compare memory pressure with `journalctl -k | tail` for OOM killer activity.",
+			}
+		case availablePct < 20:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[14], 1);
+			response.Explanation = fmt.Sprintf("Available memory is reduced at about %.0f%% of total. The host is not necessarily critical, but memory pressure is worth watching.", math.Round(availablePct))
+			response.Confidence = "High"
+			response.NextSteps = []string{
+				"Run `ps aux --sort=-%mem | head` to confirm which processes are consuming the most memory.",
+			}
+		default:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[15], 1);
+			response.Explanation = fmt.Sprintf("The pasted memory output shows about %.0f%% of memory still available, so there is no obvious severe memory-pressure signal.", math.Round(availablePct))
+			response.Confidence = "High"
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[9], 1);return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__3[4], 1);response.Explanation = "The pasted output did not look like standard `free` output, so memory pressure could not be interpreted confidently."
+	response.Confidence = "Low"
+	response.Warnings = []string{"unable to parse memory values from provided output"}
+	return response
+}
+
+func interpretKubectlGetPods(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__4[0], 14) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__4[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_kubectl_get_pods"
+	response.ExpectedOutput = "A summary of pod health states and the most likely next Kubernetes diagnostics."
+
+	var issues []string
+	var parsed int
+	for _, line := range strings.Split(text, "\n") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[6], 1);
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "NAME ") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[9], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[7], 1);fields := strings.Fields(line)
+		if len(fields) < 4 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[10], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[8], 1);parsed++
+		name := fields[0]
+		status := fields[2]
+		if status != "Running" && status != "Completed" {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[11], 1);
+			issues = append(issues, fmt.Sprintf("%s is in %s", name, status))
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[4], 1);switch {
+	case parsed == 0:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[12], 1);
+		response.Explanation = "The pasted output did not look like standard `kubectl get pods` output, so pod-state interpretation was limited."
+		response.Confidence = "Low"
+		response.Warnings = []string{"unable to parse pod rows from provided output"}
+	case len(issues) > 0:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[13], 1);
+		response.Explanation = "At least one pod is not healthy or not fully running. The cluster likely needs pod-level inspection rather than assuming the workload is healthy."
+		response.Confidence = "High"
+		for _, issue := range issues {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[16], 1);
+			response.NextSteps = append(response.NextSteps, "Inspect "+issue)
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[14], 1);response.NextSteps = append(response.NextSteps,
+			"Run `kubectl describe pod <pod> -n <namespace>` to inspect events and scheduling details.",
+			"Run `kubectl logs <pod> -n <namespace> --previous` if the pod is restarting.",
+		)
+	default:_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[15], 1);
+		response.Explanation = "All parsed pods are either Running or Completed, so the pasted output does not show an obvious unhealthy pod state."
+		response.Confidence = "High"
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__4[5], 1);return response
+}
+
+func baseInterpretResponse(command string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__5[0], 1) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__5[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__5[2], 5) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__5[3], 1);
+	return models.Response{
+		Command:    command,
+		Risk:       safety.RiskLow,
+		Confidence: "Medium",
+	}
+}
+
+func parseHumanBytes(value string) (uint64, bool) {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__6[0], 10) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__6[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__6[2], 6) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[3], 1);
+	value = strings.TrimSpace(strings.ToUpper(value))
+	if value == "" {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[7], 1);
+		return 0, false
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[4], 1);value = strings.TrimSuffix(value, "B")
+	value = strings.TrimSuffix(value, "I")
+
+	multiplier := float64(1)
+	last := value[len(value)-1]
+	switch last {
+	case 'K':_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[8], 1);
+		multiplier = 1024
+		value = value[:len(value)-1]
+	case 'M':_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[9], 1);
+		multiplier = 1024 * 1024
+		value = value[:len(value)-1]
+	case 'G':_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[10], 1);
+		multiplier = 1024 * 1024 * 1024
+		value = value[:len(value)-1]
+	case 'T':_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[11], 1);
+		multiplier = 1024 * 1024 * 1024 * 1024
+		value = value[:len(value)-1]
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[5], 1);number, err := strconv.ParseFloat(value, 64)
+	if err != nil {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[12], 1);
+		return 0, false
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__6[6], 1);return uint64(number * multiplier), true
+}
+
+func appendUnique(values []string, value string) []string {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__7[0], 4) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__7[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__7[2], 7) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__7[3], 1);
+	for _, existing := range values {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__7[5], 1);
+		if existing == value {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__7[6], 1);
+			return values
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__7[4], 1);return append(values, value)
+}
+
+func interpretJournalctl(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__8[0], 20) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__8[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__8[2], 8) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_journalctl"
+	response.ExpectedOutput = "A summary of error signals, failure patterns, and the next safe diagnostics."
+
+	lower := strings.ToLower(text)
+	var signals []string
+
+	if strings.Contains(lower, "failed") || strings.Contains(lower, "error") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[12], 1);
+		signals = append(signals, "error or failure lines detected")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[4], 1);if strings.Contains(lower, "oom") || strings.Contains(lower, "out of memory") || strings.Contains(lower, "killed process") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[13], 1);
+		signals = append(signals, "OOM killer activity detected")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[5], 1);if strings.Contains(lower, "segfault") || strings.Contains(lower, "segmentation fault") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[14], 1);
+		signals = append(signals, "segmentation fault detected")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[6], 1);if strings.Contains(lower, "permission denied") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[15], 1);
+		signals = append(signals, "permission denied errors detected")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[7], 1);if strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection timed out") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[16], 1);
+		signals = append(signals, "network connection errors detected")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[8], 1);if strings.Contains(lower, "no space left") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[17], 1);
+		signals = append(signals, "disk-full errors detected")
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[9], 1);if len(signals) == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[18], 1);
+		if strings.TrimSpace(text) == "" {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[20], 1);
+			response.Explanation = "The pasted journalctl output appears empty. The unit may have no journal entries yet, or the time window returned no records."
+			response.Confidence = "Low"
+		} else{ _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[21], 1);{
+			response.Explanation = "No obvious failure signals were found in the pasted journal output. The lines do not contain common error keywords."
+			response.Confidence = "Medium"
+			response.NextSteps = []string{
+				"Scan the output manually for unusual state transitions or unexpected restarts.",
+				"Widen the time window with `journalctl -u <service> --since today`.",
+			}
+		}}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[19], 1);return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[10], 1);response.Explanation = fmt.Sprintf("The pasted journal output contains %d signal(s): %s.",
+		len(signals), strings.Join(signals, "; "))
+	response.Confidence = "High"
+	response.NextSteps = []string{
+		"Check the lines around each error for the root cause.",
+		"Run `journalctl -u <service> -n 100 --no-pager` for more context.",
+	}
+	if strings.Contains(lower, "oom") || strings.Contains(lower, "killed process") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[22], 1);
+		response.NextSteps = append(response.NextSteps,
+			"Run `free -h` to inspect current memory state.",
+			"Run `ps aux --sort=-%mem | head` to identify memory-heavy processes.")
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__8[11], 1);return response
+}
+
+func interpretPS(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__9[0], 18) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__9[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__9[2], 9) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_ps"
+	response.ExpectedOutput = "A summary of whether any processes are consuming unusually high CPU or memory."
+
+	var highCPU, highMem []string
+	var parsed int
+
+	for _, line := range strings.Split(text, "\n") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[9], 1);
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "USER") || strings.HasPrefix(line, "PID") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[13], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[10], 1);fields := strings.Fields(line)
+		if len(fields) < 11 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[14], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[11], 1);parsed++
+		cpu, errCPU := strconv.ParseFloat(fields[2], 64)
+		mem, errMem := strconv.ParseFloat(fields[3], 64)
+		name := fields[10]
+		if errCPU == nil && cpu >= 50 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[15], 1);
+			highCPU = append(highCPU, fmt.Sprintf("%s (%.1f%% CPU)", name, cpu))
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[12], 1);if errMem == nil && mem >= 20 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[16], 1);
+			highMem = append(highMem, fmt.Sprintf("%s (%.1f%% MEM)", name, mem))
+		}
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[4], 1);if parsed == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[17], 1);
+		response.Explanation = "The pasted output did not look like standard `ps aux` output, so process-resource interpretation was limited."
+		response.Confidence = "Low"
+		response.Warnings = []string{"unable to parse process rows from provided output"}
+		return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[5], 1);if len(highCPU) == 0 && len(highMem) == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[18], 1);
+		response.Explanation = "No process in the pasted output is consuming more than 50% CPU or 20% memory."
+		response.Confidence = "High"
+		return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[6], 1);var parts []string
+	if len(highCPU) > 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[19], 1);
+		parts = append(parts, "high CPU: "+strings.Join(highCPU, ", "))
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[7], 1);if len(highMem) > 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[20], 1);
+		parts = append(parts, "high memory: "+strings.Join(highMem, ", "))
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__9[8], 1);response.Explanation = "At least one process is consuming significant resources: " + strings.Join(parts, "; ") + "."
+	response.Confidence = "High"
+	response.NextSteps = []string{
+		"Use `lsof -p <PID>` to inspect open files for the heavy process.",
+		"Check application logs for the offending process.",
+	}
+	return response
+}
+
+func interpretIPAddr(command string, text string) models.Response {_cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__10[0], 24) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__10[1], goCover_eeeb39fd84e5_P) ; _cover_atomic_.StoreUint32(&goCover_eeeb39fd84e5__10[2], 10) ; _cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[3], 1);
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_ip_addr"
+	response.ExpectedOutput = "A summary of interface states and whether any interfaces appear down or unconfigured."
+
+	var downIfaces, noIP []string
+	var currentIface string
+	var hasIP bool
+	var parsed int
+
+	for _, line := range strings.Split(text, "\n") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[10], 1);
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[13], 1);
+			continue
+		}
+		// Interface header lines start with a digit (interface index).
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[11], 1);if len(trimmed) > 0 && trimmed[0] >= '1' && trimmed[0] <= '9' {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[14], 1);
+			// Save state of the previous interface.
+			if currentIface != "" && !hasIP {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[18], 1);
+				noIP = append(noIP, currentIface)
+			}
+			_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[15], 1);hasIP = false
+			parsed++
+			fields := strings.Fields(trimmed)
+			if len(fields) >= 2 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[19], 1);
+				currentIface = strings.TrimSuffix(fields[1], ":")
+			}
+			_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[16], 1);lower := strings.ToLower(trimmed)
+			if strings.Contains(lower, "state down") || strings.Contains(lower, ",down,") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[20], 1);
+				downIfaces = append(downIfaces, currentIface)
+			}
+			_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[17], 1);continue
+		}
+		_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[12], 1);if strings.Contains(trimmed, "inet ") || strings.Contains(trimmed, "inet6 ") {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[21], 1);
+			hasIP = true
+		}
+	}
+	// Final interface.
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[4], 1);if currentIface != "" && !hasIP {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[22], 1);
+		noIP = append(noIP, currentIface)
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[5], 1);if parsed == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[23], 1);
+		response.Explanation = "The pasted output did not look like standard `ip addr` output."
+		response.Confidence = "Low"
+		response.Warnings = []string{"unable to parse interface blocks from provided output"}
+		return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[6], 1);var issues []string
+	if len(downIfaces) > 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[24], 1);
+		issues = append(issues, fmt.Sprintf("interface(s) DOWN: %s", strings.Join(downIfaces, ", ")))
+	}
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[7], 1);if len(noIP) > 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[25], 1);
+		issues = append(issues, fmt.Sprintf("no IP assigned: %s", strings.Join(noIP, ", ")))
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[8], 1);if len(issues) == 0 {_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[26], 1);
+		response.Explanation = "All parsed interfaces appear to be UP and have at least one IP address assigned."
+		response.Confidence = "High"
+		return response
+	}
+
+	_cover_atomic_.AddUint32(&goCover_eeeb39fd84e5__10[9], 1);response.Explanation = "The pasted ip addr output shows potential network issues: " + strings.Join(issues, "; ") + "."
+	response.Confidence = "High"
+	response.NextSteps = []string{
+		"Run `ip link show` to inspect link-layer state for the affected interfaces.",
+		"Check `/etc/NetworkManager/system-connections/` or `nmcli con show` for connection configuration.",
+	}
+	return response
+}
+
+var _ = _cover_atomic_.LoadUint32

@@ -1,0 +1,16 @@
+./ansible.go
+./argocd.go
+./cloud.go
+./containerd.go
+./database.go
+./git.go
+./hardware.go
+./helm.go
+./helpers.go
+./intents.go
+./k8s.go
+./linux.go
+./remote.go
+./runtime.go
+./security.go
+./terraform.go

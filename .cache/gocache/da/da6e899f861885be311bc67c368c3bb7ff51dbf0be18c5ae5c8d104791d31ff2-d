@@ -1,0 +1,56 @@
+//line /opt/noso/internal/registry/helpers.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"noso/internal/evidence"
+	"noso/pkg/models"
+)
+
+// confidenceFor scores evidence quality from multiple local sources.
+// Each source that confirms the command adds to the score:
+//   - command exists on PATH        → +1
+//   - help snippet captured         → +1
+//   - man page available            → +1
+//   - shell completion script found → +1
+func confidenceFor(ev evidence.Evidence) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__52[0], 12) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__52[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__52[2], 52) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__52[3], 1);
+	if !ev.Exists {_cover_atomic_.AddUint32(&goCover_77581bebf097__52[8], 1);
+		return "Low"
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__52[4], 1);score := 1 // exists
+	if len(ev.HelpSnippet) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__52[9], 1);
+		score++
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__52[5], 1);if ev.ManAvailable {_cover_atomic_.AddUint32(&goCover_77581bebf097__52[10], 1);
+		score++
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__52[6], 1);if ev.CompletionPath != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__52[11], 1);
+		score++
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__52[7], 1);switch {
+	case score >= 3:_cover_atomic_.AddUint32(&goCover_77581bebf097__52[12], 1);
+		return "High"
+	case score >= 2:_cover_atomic_.AddUint32(&goCover_77581bebf097__52[13], 1);
+		return "Medium"
+	default:_cover_atomic_.AddUint32(&goCover_77581bebf097__52[14], 1);
+		return "Low"
+	}
+}
+
+func addHelpEvidence(response *models.Response, ev evidence.Evidence, command string) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__53[0], 2) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__53[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__53[2], 53) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__53[3], 1);
+	// VerificationSources already contains --help when a snippet was captured,
+	// so we only add a warning for missing commands here.
+	if !ev.Exists {_cover_atomic_.AddUint32(&goCover_77581bebf097__53[4], 1);
+		appendWarning(response, command+" is not currently installed on this host")
+	}
+}
+
+func appendWarning(response *models.Response, warning string) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__54[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__54[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__54[2], 54) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__54[3], 1);
+	for _, existing := range response.Warnings {_cover_atomic_.AddUint32(&goCover_77581bebf097__54[5], 1);
+		if existing == warning {_cover_atomic_.AddUint32(&goCover_77581bebf097__54[6], 1);
+			return
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__54[4], 1);response.Warnings = append(response.Warnings, warning)
+}
+
+var _ = _cover_atomic_.LoadUint32

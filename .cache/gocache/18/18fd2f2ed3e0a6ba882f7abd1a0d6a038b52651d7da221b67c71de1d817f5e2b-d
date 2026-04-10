@@ -1,0 +1,3 @@
+./risk.go
+./fuzz_test.go
+./risk_test.go

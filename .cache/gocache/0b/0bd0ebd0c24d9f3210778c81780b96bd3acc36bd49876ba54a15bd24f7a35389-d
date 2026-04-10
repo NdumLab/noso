@@ -1,0 +1,20 @@
+//line /opt/noso/cmd/cli-helper/main.go:1:1
+package main; import _cover_atomic_ "sync/atomic"; import _ "runtime/coverage"
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"noso/internal/cli"
+)
+
+func main() {_cover_atomic_.StoreUint32(&goCover_07450664db05__0[0], 3) ; _cover_atomic_.StoreUint32(&goCover_07450664db05__0[1], goCover_07450664db05_P) ; _cover_atomic_.StoreUint32(&goCover_07450664db05__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_07450664db05__0[3], 1);
+	exitCode, err := cli.Run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	if err != nil {_cover_atomic_.AddUint32(&goCover_07450664db05__0[5], 1);
+		fmt.Fprintln(os.Stderr, strings.TrimSpace(err.Error()))
+	}
+	_cover_atomic_.AddUint32(&goCover_07450664db05__0[4], 1);os.Exit(exitCode)
+}
+
+var _ = _cover_atomic_.LoadUint32

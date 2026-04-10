@@ -1,0 +1,213 @@
+//line /opt/noso/internal/explain/command.go:1:1
+package explain; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func Command(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__0[0], 5) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__0[1], goCover_3d433fa4e96e_P) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_3d433fa4e96e__0[3], 1);
+	command := extractCommand(query)
+	base := firstWord(command)
+	ev := collector.Lookup(base)
+
+	response := models.Response{
+		IntentID:       "explain_command",
+		Command:        command,
+		Explanation:    explainCommand(command),
+		ExpectedOutput: "No command is run. This mode explains behavior, impact, and likely outcomes for the provided command.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	if len(ev.HelpSnippet) > 0 {_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__0[6], 1);
+		response.VerifiedFrom = append(response.VerifiedFrom, base+" --help")
+	}
+	_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__0[4], 1);if !ev.Exists && base != "" {_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__0[7], 1);
+		response.Warnings = append(response.Warnings, base+" is not currently installed on this host")
+	}
+	_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__0[5], 1);return response, nil
+}
+
+func extractCommand(query string) string {_cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__1[0], 4) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__1[1], goCover_3d433fa4e96e_P) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_3d433fa4e96e__1[3], 1);
+	trimmed := strings.TrimSpace(query)
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "explain "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__1[5], 1);
+		trimmed = strings.TrimSpace(trimmed[len("explain "):])
+	case strings.HasPrefix(lower, "what does "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__1[6], 1);
+		trimmed = strings.TrimSpace(trimmed[len("what does "):])
+	}
+	_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__1[4], 1);trimmed = strings.Trim(trimmed, "`\"'")
+	return trimmed
+}
+
+func explainCommand(command string) string {_cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__2[0], 70) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__2[1], goCover_3d433fa4e96e_P) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[3], 1);
+	fields := strings.Fields(command)
+	if len(fields) == 0 {_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[5], 1);
+		return "No command was provided to explain."
+	}
+
+	_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[4], 1);base := fields[0]
+	switch {
+	case command == "git status --short --branch":_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[6], 1);
+		return "Shows the current branch and a compact working-tree summary. Modified, added, deleted, and untracked files appear in a short two-column format."
+	case strings.HasPrefix(command, "git log"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[7], 1);
+		return "Displays commit history from newest to oldest. Common flags shorten output, limit commit count, or render one-line summaries."
+	case strings.HasPrefix(command, "git diff"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[8], 1);
+		return "Shows line-by-line differences between the working tree, index, or commits. This is read-only and useful before any Git cleanup or commit step."
+	case strings.HasPrefix(command, "git reset --hard"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[9], 1);
+		return "Moves HEAD and the current branch to the target commit, resets the index, and discards tracked working-tree changes. This can permanently lose uncommitted work."
+	case strings.HasPrefix(command, "rm -rf"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[10], 1);
+		return "Recursively removes files and directories without prompting. This is destructive and can delete large parts of the filesystem if the path is wrong."
+	case strings.HasPrefix(command, "systemctl restart"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[11], 1);
+		return "Restarts the named systemd unit. Existing service processes are stopped and started again, which changes host state and can interrupt traffic."
+	case strings.HasPrefix(command, "systemctl status"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[12], 1);
+		return "Queries systemd for the current unit state, recent log lines, and service metadata. This is read-only and commonly used for first diagnostics."
+	case strings.HasPrefix(command, "journalctl"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[13], 1);
+		return "Reads entries from the systemd journal. Flags here usually scope results to a unit and limit the number of lines returned."
+	case strings.HasPrefix(command, "ss "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[14], 1);
+		return "Shows socket and listening-port information from the kernel. Flags like -l, -t, -n, and -p narrow the results and expose process ownership."
+	case strings.HasPrefix(command, "find "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[15], 1);
+		return "Walks the filesystem and applies tests like type, size, and name to each path. It is read-only unless explicit action flags such as -delete are used."
+	case strings.HasPrefix(command, "du "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[16], 1);
+		return "Summarizes file or directory space usage. `-s` reports a total and `-h` renders sizes in human-readable units."
+	case strings.HasPrefix(command, "df "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[17], 1);
+		return "Reports filesystem capacity, used space, and free space for mounted filesystems. `-h` prints human-readable units."
+	case strings.HasPrefix(command, "grep "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[18], 1);
+		return "Searches input text or files for matching patterns. Recursive and line-number flags help narrow results during troubleshooting."
+	case strings.HasPrefix(command, "rpm -qi"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[19], 1);
+		return "Queries RPM metadata for an installed package and prints version, release, vendor, summary, and related package details."
+	case strings.HasPrefix(command, "tar -tf"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[20], 1);
+		return "Lists archive members without extracting them. This is a safe way to inspect tarball contents before unpacking."
+	case strings.HasPrefix(command, "ip addr"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[21], 1);
+		return "Displays network interface addresses, link states, and assigned IPv4 or IPv6 information."
+	case strings.HasPrefix(command, "ping "):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[22], 1);
+		return "Sends ICMP echo requests to test basic network reachability and latency to a host."
+	case strings.HasPrefix(command, "curl -I"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[23], 1);
+		return "Fetches only the response headers for a URL, which is useful for checking HTTP status and server metadata without downloading the full body."
+	case strings.HasPrefix(command, "helm repo list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[24], 1);
+		return "Lists configured Helm repositories from the local client configuration without modifying any cluster or release state."
+	case strings.HasPrefix(command, "helm list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[25], 1);
+		return "Lists Helm releases and their namespace, revision, status, and chart metadata."
+	case strings.HasPrefix(command, "helm status"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[26], 1);
+		return "Shows detailed information for a single Helm release, including resources, notes, and last deployment metadata."
+	case strings.HasPrefix(command, "helm history"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[27], 1);
+		return "Displays the revision history of a Helm release so you can inspect prior deploy states without changing them."
+	case strings.HasPrefix(command, "helm get values"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[28], 1);
+		return "Prints the user-supplied values for a Helm release, which helps confirm override settings and chart inputs."
+	case strings.HasPrefix(command, "helm template"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[29], 1);
+		return "Renders chart templates locally and prints Kubernetes manifests without installing or modifying a release."
+	case strings.HasPrefix(command, "terraform fmt -check"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[30], 1);
+		return "Checks Terraform file formatting without rewriting files, which makes it safe for CI-style validation."
+	case strings.HasPrefix(command, "terraform validate"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[31], 1);
+		return "Validates Terraform configuration syntax and internal references without changing infrastructure."
+	case strings.HasPrefix(command, "terraform plan"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[32], 1);
+		return "Builds a proposed infrastructure change set without applying it, which is safer than apply but can still reveal intended creates, updates, or destroys."
+	case strings.HasPrefix(command, "terraform workspace list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[33], 1);
+		return "Lists Terraform workspaces and marks the currently selected one."
+	case strings.HasPrefix(command, "terraform state list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[34], 1);
+		return "Shows resource addresses tracked in the current Terraform state without mutating that state."
+	case strings.HasPrefix(command, "ansible --version"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[35], 1);
+		return "Shows the installed Ansible version, configuration path, module locations, and Python runtime details."
+	case strings.HasPrefix(command, "ansible-inventory --list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[36], 1);
+		return "Prints the resolved inventory so you can inspect hosts, groups, and variables before running automation."
+	case strings.HasPrefix(command, "ansible-playbook --syntax-check"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[37], 1);
+		return "Validates the playbook structure and YAML syntax without executing tasks on remote hosts."
+	case strings.HasPrefix(command, "ansible-playbook --check"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[38], 1);
+		return "Runs Ansible in check mode so tasks report intended changes without making most changes, although some modules may not fully support check mode."
+	case strings.HasPrefix(command, "ssh -G"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[39], 1);
+		return "Shows the effective SSH client configuration for a host, including hostname, port, user, and identity file settings, without opening a session."
+	case strings.HasPrefix(command, "ssh-keyscan"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[40], 1);
+		return "Fetches the remote host's presented SSH public keys so you can inspect or pin them before connecting."
+	case strings.HasPrefix(command, "nc -zv"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[41], 1);
+		return "Checks whether a TCP port is reachable. Here it is used to test whether the SSH port is reachable before debugging keys or authentication."
+	case strings.HasPrefix(command, "rsync -avhn"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[42], 1);
+		return "Runs rsync in archive, verbose, human-readable, and dry-run mode so you can preview a remote transfer without copying files."
+	case strings.HasPrefix(command, "aws sts get-caller-identity"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[43], 1);
+		return "Shows the currently authenticated AWS identity and account context without changing any AWS resources."
+	case strings.HasPrefix(command, "aws configure list-profiles"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[44], 1);
+		return "Lists named AWS CLI profiles configured on the local machine."
+	case strings.HasPrefix(command, "az account show"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[45], 1);
+		return "Shows the currently selected Azure subscription and tenant context for the active Azure CLI session."
+	case strings.HasPrefix(command, "az account list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[46], 1);
+		return "Lists Azure subscriptions available to the current login and indicates which one is selected."
+	case strings.HasPrefix(command, "gcloud auth list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[47], 1);
+		return "Lists authenticated Google Cloud accounts and marks the currently active one."
+	case strings.HasPrefix(command, "gcloud config get-value project"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[48], 1);
+		return "Shows the active Google Cloud project configured in the current gcloud profile."
+	case strings.HasPrefix(command, "argocd account get-user-info"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[49], 1);
+		return "Shows the currently authenticated Argo CD account and capability information without changing application state."
+	case strings.HasPrefix(command, "argocd app list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[50], 1);
+		return "Lists Argo CD applications and summarizes their sync and health status."
+	case strings.HasPrefix(command, "argocd app get"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[51], 1);
+		return "Shows detailed status for a single Argo CD application, including sync state, health, and managed resources."
+	case strings.HasPrefix(command, "argocd proj list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[52], 1);
+		return "Lists Argo CD projects and their configured scope boundaries."
+	case strings.HasPrefix(command, "argocd cluster list"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[53], 1);
+		return "Lists Kubernetes clusters registered with Argo CD."
+	case strings.HasPrefix(command, "getenforce"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[54], 1);
+		return "Shows the current SELinux enforcement mode without changing policy state."
+	case strings.HasPrefix(command, "sestatus"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[55], 1);
+		return "Shows SELinux status, policy details, and configured enforcement state."
+	case strings.HasPrefix(command, "firewall-cmd --list-all"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[56], 1);
+		return "Shows the active firewalld zone configuration, including services, ports, interfaces, and rules."
+	case strings.HasPrefix(command, "firewall-cmd --get-active-zones"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[57], 1);
+		return "Lists active firewalld zones and the interfaces or sources assigned to them."
+	case strings.HasPrefix(command, "openssl x509 -in"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[58], 1);
+		return "Decodes an X.509 certificate file so you can inspect subject, issuer, validity, SANs, and other extensions without modifying the certificate."
+	case strings.HasPrefix(command, "lscpu"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[59], 1);
+		return "Shows CPU architecture, model, socket, core, thread, and virtualization details from the local system."
+	case strings.HasPrefix(command, "free -h"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[60], 1);
+		return "Shows system memory and swap totals, usage, and available memory in human-readable units."
+	case strings.HasPrefix(command, "lsblk -o"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[61], 1);
+		return "Lists block devices, sizes, types, filesystems, and mountpoints so you can inspect disk layout without changing it."
+	case strings.HasPrefix(command, "dmidecode -t system"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[62], 1);
+		return "Reads SMBIOS or DMI system information such as vendor, product name, serial, and UUID. It is read-only but may require elevated privileges on some hosts."
+	case strings.HasPrefix(command, "smartctl -H"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[63], 1);
+		return "Shows the overall SMART health assessment for a disk without changing the device state."
+	case strings.HasPrefix(command, "ipmitool mc info"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[64], 1);
+		return "Shows basic IPMI management controller information, which helps confirm BMC reachability and firmware identity."
+	case strings.HasPrefix(command, "nvidia-smi"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[65], 1);
+		return "Shows NVIDIA GPU inventory, driver state, memory usage, utilization, and active processes without changing GPU settings."
+	case strings.HasPrefix(command, "psql --version"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[66], 1);
+		return "Shows the installed PostgreSQL client version."
+	case strings.HasPrefix(command, "psql -l"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[67], 1);
+		return "Lists PostgreSQL databases visible to the current connection settings, including owner, encoding, and access privileges."
+	case strings.HasPrefix(command, "mysql --version"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[68], 1);
+		return "Shows the installed MySQL client version."
+	case strings.HasPrefix(command, "mysql --execute=\"show databases;\""):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[69], 1);
+		return "Asks the MySQL client to list databases visible to the current login context."
+	case strings.HasPrefix(command, "redis-cli --version"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[70], 1);
+		return "Shows the installed Redis CLI version."
+	case strings.HasPrefix(command, "redis-cli ping"):_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[71], 1);
+		return "Sends a simple Redis ping command and expects PONG when a Redis server is reachable with the current connection settings."
+	default:_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__2[72], 1);
+		return fmt.Sprintf("Explains the command starting with `%s`. The tool can identify the base command, classify its risk, and use local help evidence when the command exists on this host.", base)
+	}
+}
+
+func firstWord(command string) string {_cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__3[0], 3) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__3[1], goCover_3d433fa4e96e_P) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_3d433fa4e96e__3[3], 1);
+	fields := strings.Fields(command)
+	if len(fields) == 0 {_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__3[5], 1);
+		return ""
+	}
+	_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__3[4], 1);return fields[0]
+}
+
+func confidenceFor(ev evidence.Evidence) string {_cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__4[0], 4) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__4[1], goCover_3d433fa4e96e_P) ; _cover_atomic_.StoreUint32(&goCover_3d433fa4e96e__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_3d433fa4e96e__4[3], 1);
+	switch {
+	case ev.Exists && len(ev.HelpSnippet) > 0:_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__4[4], 1);
+		return "High"
+	case ev.Exists:_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__4[5], 1);
+		return "Medium"
+	default:_cover_atomic_.AddUint32(&goCover_3d433fa4e96e__4[6], 1);
+		return "Low"
+	}
+}
+
+var _ = _cover_atomic_.LoadUint32

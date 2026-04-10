@@ -1,0 +1,19 @@
+//line /opt/noso/pkg/buildinfo/info.go:1:1
+package buildinfo; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"runtime"
+)
+
+var (
+	Version = "dev"
+	Commit  = "unknown"
+	Date    = "unknown"
+)
+
+func String() string {_cover_atomic_.StoreUint32(&goCover_02a9bd1ba760__0[0], 1) ; _cover_atomic_.StoreUint32(&goCover_02a9bd1ba760__0[1], goCover_02a9bd1ba760_P) ; _cover_atomic_.StoreUint32(&goCover_02a9bd1ba760__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_02a9bd1ba760__0[3], 1);
+	return fmt.Sprintf("version=%s commit=%s date=%s go=%s", Version, Commit, Date, runtime.Version())
+}
+
+var _ = _cover_atomic_.LoadUint32

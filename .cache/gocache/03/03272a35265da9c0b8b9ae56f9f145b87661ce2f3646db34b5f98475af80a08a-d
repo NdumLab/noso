@@ -1,0 +1,210 @@
+//line /opt/noso/internal/registry/k8s.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func kubectlVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__57[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__57[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__57[2], 57) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__57[3], 1);
+	ev := collector.Lookup("kubectl")
+	command := "kubectl version --client"
+	response := models.Response{
+		IntentID:       "inspect_k8s_version",
+		Command:        command,
+		Explanation:    "Shows the installed kubectl client version without requiring a cluster mutation.",
+		ExpectedOutput: "Client version details for the local kubectl binary.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlContextIntent(env models.Environment, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__58[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__58[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__58[2], 58) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__58[3], 1);
+	ev := collector.Lookup("kubectl")
+	command := "kubectl config current-context"
+	explanation := "Shows the active Kubernetes context so you can confirm which cluster and credentials kubectl will target."
+	expected := "The current kubeconfig context name."
+	response := models.Response{
+		IntentID:       "inspect_k8s_context",
+		Command:        command,
+		Explanation:    explanation,
+		ExpectedOutput: expected,
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	if env.KubeContext == "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__58[5], 1);
+		appendWarning(&response, "no current Kubernetes context is available on this host")
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__58[4], 1);return response, nil
+}
+
+func kubectlPodsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__59[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__59[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__59[2], 59) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__59[3], 1);
+	ev := collector.Lookup("kubectl")
+	namespace := extractNamespace(query)
+	command := "kubectl get pods -A"
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__59[5], 1);
+		command = fmt.Sprintf("kubectl get pods -n %s", namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__59[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_pods",
+		Command:        command,
+		Explanation:    "Lists pods and their readiness, status, restart counts, and age.",
+		ExpectedOutput: "A pod table showing namespace, name, readiness, phase, restarts, and age.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlDeploymentsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__60[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__60[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__60[2], 60) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__60[3], 1);
+	ev := collector.Lookup("kubectl")
+	namespace := extractNamespace(query)
+	command := "kubectl get deployments -A"
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__60[5], 1);
+		command = fmt.Sprintf("kubectl get deployments -n %s", namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__60[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_deployments",
+		Command:        command,
+		Explanation:    "Lists deployments and their desired, current, and available replica counts.",
+		ExpectedOutput: "A deployment table showing readiness, up-to-date replicas, and availability.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlServicesIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__61[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__61[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__61[2], 61) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__61[3], 1);
+	ev := collector.Lookup("kubectl")
+	namespace := extractNamespace(query)
+	command := "kubectl get services -A"
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__61[5], 1);
+		command = fmt.Sprintf("kubectl get services -n %s", namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__61[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_services",
+		Command:        command,
+		Explanation:    "Lists services, types, cluster IPs, external IPs, and exposed ports.",
+		ExpectedOutput: "A service table showing the service type and relevant IP or port information.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlNamespacesIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__62[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__62[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__62[2], 62) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__62[3], 1);
+	ev := collector.Lookup("kubectl")
+	command := "kubectl get namespaces"
+	response := models.Response{
+		IntentID:       "inspect_k8s_namespaces",
+		Command:        command,
+		Explanation:    "Lists namespaces and their lifecycle state.",
+		ExpectedOutput: "A namespace table showing each namespace and whether it is active or terminating.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlLogsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__63[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__63[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__63[2], 63) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__63[3], 1);
+	ev := collector.Lookup("kubectl")
+	pod := extractNamedObject(query, "pod", "pod-name")
+	namespace := extractNamespace(query)
+	command := fmt.Sprintf("kubectl logs %s --tail=100", pod)
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__63[5], 1);
+		command = fmt.Sprintf("kubectl logs -n %s %s --tail=100", namespace, pod)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__63[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_logs",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the most recent 100 log lines for pod %s.", pod),
+		ExpectedOutput: "Recent application log lines from the selected pod or container.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlDescribePodIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__64[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__64[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__64[2], 64) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__64[3], 1);
+	ev := collector.Lookup("kubectl")
+	pod := extractNamedObject(query, "pod", "pod-name")
+	namespace := extractNamespace(query)
+	command := fmt.Sprintf("kubectl describe pod %s", pod)
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__64[5], 1);
+		command = fmt.Sprintf("kubectl describe pod -n %s %s", namespace, pod)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__64[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_pod_describe",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows detailed pod status, events, container states, mounts, and scheduling information for pod %s.", pod),
+		ExpectedOutput: "A detailed pod report including conditions, events, container states, and related node information.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func kubectlEventsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__65[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__65[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__65[2], 65) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__65[3], 1);
+	ev := collector.Lookup("kubectl")
+	namespace := extractNamespace(query)
+	command := "kubectl get events -A --sort-by=.metadata.creationTimestamp"
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__65[5], 1);
+		command = fmt.Sprintf("kubectl get events -n %s --sort-by=.metadata.creationTimestamp", namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__65[4], 1);response := models.Response{
+		IntentID:       "inspect_k8s_events",
+		Command:        command,
+		Explanation:    "Shows recent cluster events in chronological order, which helps explain scheduling and image-pull failures.",
+		ExpectedOutput: "An events table with involved objects, reasons, timestamps, and controller messages.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "kubectl")
+	return response, nil
+}
+
+func extractNamespace(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__66[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__66[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__66[2], 66) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__66[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, "namespace "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__66[5], 1);
+		fields := strings.Fields(lower[idx+len("namespace "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__66[6], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__66[4], 1);return ""
+}
+
+func extractNamedObject(query, keyword, fallback string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__67[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__67[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__67[2], 67) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__67[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, keyword+" "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__67[5], 1);
+		fields := strings.Fields(lower[idx+len(keyword+" "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__67[6], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__67[4], 1);return fallback
+}
+
+var _ = _cover_atomic_.LoadUint32

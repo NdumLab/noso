@@ -1,0 +1,4 @@
+./build.go
+./render.go
+./build_test.go
+./render_test.go

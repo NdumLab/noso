@@ -1,0 +1,148 @@
+//line /opt/noso/internal/registry/runtime.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func runtimeStatusIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__91[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__91[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__91[2], 91) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__91[3], 1);
+	runtime := detectRuntime(query, "docker")
+	ev := collector.Lookup("systemctl")
+	command := fmt.Sprintf("systemctl status %s --no-pager -l", runtime)
+	response := models.Response{
+		IntentID:       "inspect_runtime_status",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows whether the %s service is loaded and active, plus recent unit details and failure context.", runtime),
+		ExpectedOutput: fmt.Sprintf("Loaded or active state, the main PID, recent log lines, and any recent failure information for the %s service.", runtime),
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "systemctl")
+	addRuntimeMissingWarning(&response, runtime, collector)
+	return response, nil
+}
+
+func runtimeVersionIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__92[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__92[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__92[2], 92) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__92[3], 1);
+	runtime := detectRuntime(query, "docker")
+	ev := collector.Lookup(runtime)
+	command := fmt.Sprintf("%s version", runtime)
+	response := models.Response{
+		IntentID:       "inspect_runtime_version",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows client and server version details for %s when the runtime is installed.", runtime),
+		ExpectedOutput: "Version output for the runtime client and, when available, the connected server or daemon.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, runtime)
+	return response, nil
+}
+
+func runtimePsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__93[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__93[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__93[2], 93) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__93[3], 1);
+	runtime := detectRuntime(query, "docker")
+	ev := collector.Lookup(runtime)
+	command := fmt.Sprintf("%s ps -a", runtime)
+	response := models.Response{
+		IntentID:       "inspect_runtime_containers",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Lists running and stopped containers known to %s without changing runtime state.", runtime),
+		ExpectedOutput: "A container table with IDs, images, names, statuses, and exposed ports when available.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, runtime)
+	return response, nil
+}
+
+func runtimeImagesIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__94[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__94[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__94[2], 94) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__94[3], 1);
+	runtime := detectRuntime(query, "docker")
+	ev := collector.Lookup(runtime)
+	command := fmt.Sprintf("%s images", runtime)
+	response := models.Response{
+		IntentID:       "inspect_runtime_images",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Lists images available to %s, including repositories, tags, IDs, and sizes.", runtime),
+		ExpectedOutput: "An image table with repository, tag, image ID, creation time, and size.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, runtime)
+	return response, nil
+}
+
+func runtimeLogsIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__95[0], 6) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__95[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__95[2], 95) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__95[3], 1);
+	runtime := detectRuntime(query, "docker")
+	target := "container-name"
+	if matches := runtimeLogsRegex.FindStringSubmatch(strings.ToLower(query)); len(matches) >= 3 {_cover_atomic_.AddUint32(&goCover_77581bebf097__95[5], 1);
+		if matches[1] != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__95[7], 1);
+			target = matches[1]
+		}
+		_cover_atomic_.AddUint32(&goCover_77581bebf097__95[6], 1);if matches[2] != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__95[8], 1);
+			target = matches[2]
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__95[4], 1);ev := collector.Lookup(runtime)
+	command := fmt.Sprintf("%s logs --tail 100 %s", runtime, target)
+	response := models.Response{
+		IntentID:       "inspect_runtime_container_logs",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the last 100 log lines for container %s using %s.", target, runtime),
+		ExpectedOutput: "Recent stdout or stderr log lines from the requested container, if it exists.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, runtime)
+	return response, nil
+}
+
+func runtimeInspectIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__96[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__96[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__96[2], 96) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__96[3], 1);
+	runtime := "docker"
+	target := "container-name"
+	if matches := runtimeInspectRegex.FindStringSubmatch(strings.ToLower(query)); len(matches) == 3 {_cover_atomic_.AddUint32(&goCover_77581bebf097__96[5], 1);
+		runtime = matches[1]
+		target = matches[2]
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__96[4], 1);ev := collector.Lookup(runtime)
+	command := fmt.Sprintf("%s inspect %s", runtime, target)
+	response := models.Response{
+		IntentID:       "inspect_runtime_container",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows low-level JSON metadata for container %s, including mounts, network settings, and restart information.", target),
+		ExpectedOutput: "A JSON document describing the container configuration and current runtime state.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, runtime)
+	return response, nil
+}
+
+func detectRuntime(query, fallback string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__97[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__97[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__97[2], 97) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__97[3], 1);
+	normalized := strings.ToLower(query)
+	switch {
+	case strings.Contains(normalized, "podman"):_cover_atomic_.AddUint32(&goCover_77581bebf097__97[4], 1);
+		return "podman"
+	case strings.Contains(normalized, "docker"):_cover_atomic_.AddUint32(&goCover_77581bebf097__97[5], 1);
+		return "docker"
+	default:_cover_atomic_.AddUint32(&goCover_77581bebf097__97[6], 1);
+		return fallback
+	}
+}
+
+func addRuntimeMissingWarning(response *models.Response, runtime string, collector evidence.Collector) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__98[0], 2) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__98[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__98[2], 98) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__98[3], 1);
+	if ev := collector.Lookup(runtime); !ev.Exists {_cover_atomic_.AddUint32(&goCover_77581bebf097__98[4], 1);
+		appendWarning(response, runtime+" is not currently installed on this host")
+	}
+}
+
+var _ = _cover_atomic_.LoadUint32

@@ -1,0 +1,90 @@
+//line /opt/noso/internal/registry/database.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func postgresVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__25[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__25[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__25[2], 25) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__25[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("psql"),
+		"inspect_postgres_version",
+		"psql --version",
+		"Shows the installed PostgreSQL client version.",
+		"PostgreSQL client version information for the local host.",
+		"psql",
+	)
+}
+
+func postgresDatabasesIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__26[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__26[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__26[2], 26) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__26[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("psql"),
+		"inspect_postgres_databases",
+		"psql -l",
+		"Lists PostgreSQL databases visible to the current connection settings.",
+		"A table of PostgreSQL databases with owner, encoding, locale, and access privilege details.",
+		"psql",
+	)
+}
+
+func mysqlVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__27[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__27[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__27[2], 27) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__27[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("mysql"),
+		"inspect_mysql_version",
+		"mysql --version",
+		"Shows the installed MySQL client version.",
+		"MySQL client version information for the local host.",
+		"mysql",
+	)
+}
+
+func mysqlDatabasesIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__28[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__28[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__28[2], 28) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__28[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("mysql"),
+		"inspect_mysql_databases",
+		`mysql --execute="SHOW DATABASES;"`,
+		"Lists MySQL databases visible to the current login context without changing schema state.",
+		"A result set of database names returned by the MySQL server.",
+		"mysql",
+	)
+}
+
+func redisVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__29[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__29[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__29[2], 29) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__29[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("redis-cli"),
+		"inspect_redis_version",
+		"redis-cli --version",
+		"Shows the installed Redis CLI version.",
+		"Redis CLI version information for the local host.",
+		"redis-cli",
+	)
+}
+
+func redisPingIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__30[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__30[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__30[2], 30) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__30[3], 1);
+	return simpleDatabaseIntent(
+		collector.Lookup("redis-cli"),
+		"inspect_redis_health",
+		"redis-cli ping",
+		"Sends a lightweight Redis ping to confirm a reachable Redis endpoint with the current client settings.",
+		"A PONG response when Redis is reachable, or a connection or authentication error if it is not.",
+		"redis-cli",
+	)
+}
+
+func simpleDatabaseIntent(ev evidence.Evidence, intentID, command, explanation, expected, evidenceName string) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__31[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__31[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__31[2], 31) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__31[3], 1);
+	response := models.Response{
+		IntentID:       intentID,
+		Command:        command,
+		Explanation:    explanation,
+		ExpectedOutput: expected,
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, evidenceName)
+	return response, nil
+}
+
+var _ = _cover_atomic_.LoadUint32

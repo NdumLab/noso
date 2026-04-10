@@ -1,0 +1,11 @@
+mode: atomic
+noso/internal/safety/risk.go:15.38,20.40 2 118
+noso/internal/safety/risk.go:20.40,21.29 1 454
+noso/internal/safety/risk.go:21.29,23.4 1 12
+noso/internal/safety/risk.go:26.2,26.37 1 106
+noso/internal/safety/risk.go:26.37,27.29 1 1961
+noso/internal/safety/risk.go:27.29,29.4 1 43
+noso/internal/safety/risk.go:32.2,32.39 1 63
+noso/internal/safety/risk.go:32.39,33.29 1 1850
+noso/internal/safety/risk.go:33.29,35.4 1 30
+noso/internal/safety/risk.go:38.2,38.16 1 33

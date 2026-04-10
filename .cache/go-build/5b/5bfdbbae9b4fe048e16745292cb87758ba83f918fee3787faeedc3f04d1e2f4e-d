@@ -1,0 +1,25 @@
+# test log
+getenv NOSO_MODE
+getenv GOTMPDIR
+getenv TMPDIR
+getenv NOSO_AUDIT_LOG_PATH
+stat /tmp/TestLoadUsesEnvOverrides246903238
+getenv NOSO_CONFIG
+getenv HOME
+getenv NOSO_CONFIG
+open /tmp/TestLoadUsesEnvOverrides246903238/002/missing.json
+getenv NOSO_MODE
+getenv NOSO_AUDIT_LOG_PATH
+open /tmp
+getenv GOTMPDIR
+getenv TMPDIR
+open /tmp/TestLoadReadsJSONConfig1418665695/001/config.json
+getenv NOSO_CONFIG
+getenv NOSO_MODE
+getenv NOSO_AUDIT_LOG_PATH
+getenv HOME
+getenv NOSO_CONFIG
+open /tmp/TestLoadReadsJSONConfig1418665695/001/config.json
+getenv NOSO_MODE
+getenv NOSO_AUDIT_LOG_PATH
+open /tmp

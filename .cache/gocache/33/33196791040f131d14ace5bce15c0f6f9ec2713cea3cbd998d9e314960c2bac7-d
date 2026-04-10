@@ -1,0 +1,3 @@
+covervars.go
+command.cover.go
+./command_test.go

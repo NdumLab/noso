@@ -1,0 +1,3 @@
+covervars.go
+collector.cover.go
+./collector_test.go

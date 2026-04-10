@@ -1,0 +1,5 @@
+covervars.go
+build.cover.go
+render.cover.go
+./build_test.go
+./render_test.go

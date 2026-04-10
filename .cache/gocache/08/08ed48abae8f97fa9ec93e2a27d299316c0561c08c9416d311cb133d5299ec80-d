@@ -1,0 +1,93 @@
+//line /opt/noso/internal/registry/argocd.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func argocdVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__5[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__5[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__5[2], 5) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__5[3], 1);
+	return simpleArgoIntent(
+		collector.Lookup("argocd"),
+		"inspect_argocd_version",
+		"argocd version --client",
+		"Shows the installed Argo CD CLI version without requiring a server-side change.",
+		"Client version details for the local Argo CD CLI.",
+	)
+}
+
+func argocdAccountIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__6[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__6[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__6[2], 6) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__6[3], 1);
+	return simpleArgoIntent(
+		collector.Lookup("argocd"),
+		"inspect_argocd_account",
+		"argocd account get-user-info",
+		"Shows the currently authenticated Argo CD account and capability information.",
+		"Current user or account details for the active Argo CD login context.",
+	)
+}
+
+func argocdAppsIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__7[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__7[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__7[2], 7) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__7[3], 1);
+	return simpleArgoIntent(
+		collector.Lookup("argocd"),
+		"inspect_argocd_applications",
+		"argocd app list",
+		"Lists Argo CD applications and their sync and health status.",
+		"A table of Argo CD applications including project, sync state, health, and destination.",
+	)
+}
+
+func argocdAppGetIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__8[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__8[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__8[2], 8) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__8[3], 1);
+	ev := collector.Lookup("argocd")
+	app := extractNamedObject(query, "app", "application-name")
+	command := fmt.Sprintf("argocd app get %s", app)
+	response := models.Response{
+		IntentID:       "inspect_argocd_application",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows detailed status for Argo CD application %s, including sync state, health, and resource summaries.", app),
+		ExpectedOutput: "A detailed application report showing source, destination, sync status, health, history, and managed resources.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "argocd")
+	return response, nil
+}
+
+func argocdProjectsIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__9[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__9[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__9[2], 9) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__9[3], 1);
+	return simpleArgoIntent(
+		collector.Lookup("argocd"),
+		"inspect_argocd_projects",
+		"argocd proj list",
+		"Lists Argo CD projects and their repository or destination boundaries.",
+		"A project table showing configured projects and high-level scope details.",
+	)
+}
+
+func argocdClustersIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__10[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__10[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__10[2], 10) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__10[3], 1);
+	return simpleArgoIntent(
+		collector.Lookup("argocd"),
+		"inspect_argocd_clusters",
+		"argocd cluster list",
+		"Lists Kubernetes clusters registered with Argo CD.",
+		"A cluster table showing server addresses, names, and connection state.",
+	)
+}
+
+func simpleArgoIntent(ev evidence.Evidence, intentID, command, explanation, expected string) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__11[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__11[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__11[2], 11) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__11[3], 1);
+	response := models.Response{
+		IntentID:       intentID,
+		Command:        command,
+		Explanation:    explanation,
+		ExpectedOutput: expected,
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "argocd")
+	return response, nil
+}
+
+var _ = _cover_atomic_.LoadUint32

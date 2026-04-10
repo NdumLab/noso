@@ -1,0 +1,99 @@
+//line /opt/noso/internal/registry/ansible.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func ansibleVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__0[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__0[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__0[3], 1);
+	ev := collector.Lookup("ansible")
+	command := "ansible --version"
+	response := models.Response{
+		IntentID:       "inspect_ansible_version",
+		Command:        command,
+		Explanation:    "Shows the installed Ansible version, Python runtime, and module search paths.",
+		ExpectedOutput: "Version information for the Ansible CLI plus environment details such as config and Python paths.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ansible")
+	return response, nil
+}
+
+func ansibleInventoryIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__1[0], 6) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__1[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__1[3], 1);
+	ev := collector.Lookup("ansible-inventory")
+	command := "ansible-inventory --list"
+	if !ev.Exists {_cover_atomic_.AddUint32(&goCover_77581bebf097__1[6], 1);
+		ev = collector.Lookup("ansible")
+		command = "ansible-inventory --list"
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__1[4], 1);response := models.Response{
+		IntentID:       "inspect_ansible_inventory",
+		Command:        command,
+		Explanation:    "Prints the resolved Ansible inventory so you can confirm groups, hosts, and variables before any playbook run.",
+		ExpectedOutput: "Inventory data in JSON or YAML form, depending on configuration and output options.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	if collector.Lookup("ansible-inventory").Exists {_cover_atomic_.AddUint32(&goCover_77581bebf097__1[7], 1);
+		addHelpEvidence(&response, collector.Lookup("ansible-inventory"), "ansible-inventory")
+	} else{ _cover_atomic_.AddUint32(&goCover_77581bebf097__1[8], 1);{
+		appendWarning(&response, "ansible-inventory is not currently installed on this host")
+		appendWarning(&response, "inventory inspection assumes the standalone ansible-inventory helper is available")
+	}}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__1[5], 1);return response, nil
+}
+
+func ansibleSyntaxCheckIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__2[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__2[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__2[3], 1);
+	ev := collector.Lookup("ansible-playbook")
+	playbook := extractPlaybook(query)
+	command := fmt.Sprintf("ansible-playbook --syntax-check %s", playbook)
+	response := models.Response{
+		IntentID:       "validate_ansible_playbook_syntax",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Checks the syntax of playbook %s without running any tasks on target hosts.", playbook),
+		ExpectedOutput: "No output or a success message when syntax is valid, or parser and YAML errors when the playbook is invalid.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ansible-playbook")
+	return response, nil
+}
+
+func ansibleCheckModeIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__3[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__3[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__3[3], 1);
+	ev := collector.Lookup("ansible-playbook")
+	playbook := extractPlaybook(query)
+	command := fmt.Sprintf("ansible-playbook --check %s", playbook)
+	response := models.Response{
+		IntentID:       "preview_ansible_check_mode",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Runs playbook %s in Ansible check mode so tasks report what they would change without making most changes.", playbook),
+		ExpectedOutput: "A play recap and task output showing intended changes, skipped tasks, and modules that do or do not support check mode.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ansible-playbook")
+	return response, nil
+}
+
+func extractPlaybook(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__4[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__4[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__4[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, "playbook "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__4[5], 1);
+		fields := strings.Fields(query[idx+len("playbook "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__4[6], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__4[4], 1);return "site.yml"
+}
+
+var _ = _cover_atomic_.LoadUint32

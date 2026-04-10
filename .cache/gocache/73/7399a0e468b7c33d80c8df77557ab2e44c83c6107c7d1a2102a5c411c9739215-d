@@ -1,0 +1,162 @@
+//line /opt/noso/internal/registry/helm.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func helmVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__44[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__44[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__44[2], 44) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__44[3], 1);
+	ev := collector.Lookup("helm")
+	command := "helm version --short"
+	response := models.Response{
+		IntentID:       "inspect_helm_version",
+		Command:        command,
+		Explanation:    "Shows the installed Helm client version in a compact format.",
+		ExpectedOutput: "A short Helm version string for the local client.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmReposIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__45[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__45[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__45[2], 45) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__45[3], 1);
+	ev := collector.Lookup("helm")
+	command := "helm repo list"
+	response := models.Response{
+		IntentID:       "inspect_helm_repos",
+		Command:        command,
+		Explanation:    "Lists configured Helm chart repositories without modifying local state.",
+		ExpectedOutput: "A table of configured Helm repository names and URLs.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmReleasesIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__46[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__46[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__46[2], 46) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__46[3], 1);
+	ev := collector.Lookup("helm")
+	namespace := extractNamespace(query)
+	command := "helm list -A"
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__46[5], 1);
+		command = fmt.Sprintf("helm list -n %s", namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__46[4], 1);response := models.Response{
+		IntentID:       "inspect_helm_releases",
+		Command:        command,
+		Explanation:    "Lists Helm releases and their revision, status, chart, and app version details.",
+		ExpectedOutput: "A release table showing installed release names, namespaces, revisions, and status.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmStatusIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__47[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__47[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__47[2], 47) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__47[3], 1);
+	ev := collector.Lookup("helm")
+	release := extractNamedObject(query, "release", "release-name")
+	namespace := extractNamespace(query)
+	command := fmt.Sprintf("helm status %s", release)
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__47[5], 1);
+		command = fmt.Sprintf("helm status %s -n %s", release, namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__47[4], 1);response := models.Response{
+		IntentID:       "inspect_helm_release_status",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the current state, chart metadata, notes, and resource summary for Helm release %s.", release),
+		ExpectedOutput: "Helm release status details including last deployment time, namespace, resources, and notes when available.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmHistoryIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__48[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__48[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__48[2], 48) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__48[3], 1);
+	ev := collector.Lookup("helm")
+	release := extractNamedObject(query, "release", "release-name")
+	namespace := extractNamespace(query)
+	command := fmt.Sprintf("helm history %s", release)
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__48[5], 1);
+		command = fmt.Sprintf("helm history %s -n %s", release, namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__48[4], 1);response := models.Response{
+		IntentID:       "inspect_helm_release_history",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the revision history for Helm release %s without changing it.", release),
+		ExpectedOutput: "A revision table showing revision numbers, update times, status, chart version, and descriptions.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmValuesIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__49[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__49[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__49[2], 49) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__49[3], 1);
+	ev := collector.Lookup("helm")
+	release := extractNamedObject(query, "release", "release-name")
+	namespace := extractNamespace(query)
+	command := fmt.Sprintf("helm get values %s", release)
+	if namespace != "" {_cover_atomic_.AddUint32(&goCover_77581bebf097__49[5], 1);
+		command = fmt.Sprintf("helm get values %s -n %s", release, namespace)
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__49[4], 1);response := models.Response{
+		IntentID:       "inspect_helm_values",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the user-supplied values for Helm release %s.", release),
+		ExpectedOutput: "Rendered YAML values used for the selected release.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func helmTemplateIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__50[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__50[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__50[2], 50) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__50[3], 1);
+	ev := collector.Lookup("helm")
+	chart := extractChartName(query)
+	command := fmt.Sprintf("helm template %s", chart)
+	response := models.Response{
+		IntentID:       "preview_helm_template",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Renders chart %s locally so you can preview Kubernetes manifests without installing or upgrading a release.", chart),
+		ExpectedOutput: "YAML manifests printed to stdout, representing the rendered templates for the chart.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "helm")
+	return response, nil
+}
+
+func extractChartName(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__51[0], 7) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__51[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__51[2], 51) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__51[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, "chart "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__51[6], 1);
+		fields := strings.Fields(query[idx+len("chart "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__51[7], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__51[4], 1);if idx := strings.Index(lower, "template "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__51[8], 1);
+		fields := strings.Fields(query[idx+len("template "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__51[9], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__51[5], 1);return "chart-dir"
+}
+
+var _ = _cover_atomic_.LoadUint32

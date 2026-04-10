@@ -1,0 +1,4 @@
+covervars.go
+logger.cover.go
+reader.cover.go
+./reader_test.go

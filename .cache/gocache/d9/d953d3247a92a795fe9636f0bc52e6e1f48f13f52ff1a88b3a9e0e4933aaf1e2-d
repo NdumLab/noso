@@ -1,0 +1,116 @@
+//line /opt/noso/internal/doctor/check.go:1:1
+package doctor; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/config"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+var coreCommands = []string{"bash", "systemctl", "ss", "find", "git"}
+
+func Check(cfg config.Config, env models.Environment) models.Response {_cover_atomic_.StoreUint32(&goCover_764e1b147f88__0[0], 15) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__0[1], goCover_764e1b147f88_P) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__0[2], 0) ; _cover_atomic_.AddUint32(&goCover_764e1b147f88__0[3], 1);
+	response := models.Response{
+		IntentID:       "doctor",
+		Command:        "doctor",
+		ExpectedOutput: "A summary of local readiness, config health, platform fit, and command availability.",
+		Risk:           safety.RiskLow,
+		Confidence:     "High",
+		VerifiedFrom:   []string{"/etc/os-release", "command -v", "config"},
+	}
+
+	var warnings []string
+	switch env.Distro {
+	case "rhel", "fedora", "debian", "suse", "arch":_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[8], 1);
+		// Known and supported distro families — no warning needed.
+	case "":_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[9], 1);
+		// Distro field not yet populated (old environment struct); fall back
+		// to the legacy IsRHEL9 check so existing tests and deployments
+		// continue to work.
+		if !env.IsRHEL9 {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[11], 1);
+			warnings = append(warnings, fmt.Sprintf("host is %s %s; package-manager commands may not match this distribution", env.OSID, env.VersionID))
+		}
+	default:_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[10], 1);
+		warnings = append(warnings, fmt.Sprintf("host distro family %q is not yet fully validated; some package-manager commands may differ", env.Distro))
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[4], 1);if cfg.AuditLogPath == "" {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[12], 1);
+		warnings = append(warnings, "audit log path is empty")
+	} else{ _cover_atomic_.AddUint32(&goCover_764e1b147f88__0[13], 1);if !config.AuditPathUsable(cfg.AuditLogPath) {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[14], 1);
+		warnings = append(warnings, "audit log path is not writable: "+cfg.AuditLogPath)
+	}}
+
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[5], 1);var missingCore []string
+	for _, name := range coreCommands {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[15], 1);
+		if !env.Commands[name].Exists {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[16], 1);
+			missingCore = append(missingCore, name)
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[6], 1);if len(missingCore) > 0 {_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[17], 1);
+		warnings = append(warnings, "core commands missing: "+strings.Join(missingCore, ", "))
+	}
+
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__0[7], 1);response.Warnings = warnings
+	response.Explanation = summary(env, cfg, warnings)
+	response.NextSteps = nextSteps(cfg, warnings)
+	return response
+}
+
+func summary(env models.Environment, cfg config.Config, warnings []string) string {_cover_atomic_.StoreUint32(&goCover_764e1b147f88__1[0], 9) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__1[1], goCover_764e1b147f88_P) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__1[2], 1) ; _cover_atomic_.AddUint32(&goCover_764e1b147f88__1[3], 1);
+	base := "Local readiness checks completed."
+	switch {
+	case env.Distro != "" && env.PackageManager != "":_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[7], 1);
+		base += fmt.Sprintf(" Detected distro family: %s (package manager: %s).", env.Distro, env.PackageManager)
+	case env.IsRHEL9:_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[8], 1);
+		base += " Host matches the RHEL 9 target."
+	default:_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[9], 1);
+		base += fmt.Sprintf(" Host OS: %s %s.", env.OSID, env.VersionID)
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[4], 1);if cfg.AuditLogPath != "" {_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[10], 1);
+		base += " Audit logging is configured."
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[5], 1);if len(warnings) == 0 {_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[11], 1);
+		return base + " No blocking issues were detected."
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__1[6], 1);return fmt.Sprintf("%s %d issue(s) need attention before full coverage is available.", base, len(warnings))
+}
+
+func nextSteps(cfg config.Config, warnings []string) []string {_cover_atomic_.StoreUint32(&goCover_764e1b147f88__2[0], 8) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__2[1], goCover_764e1b147f88_P) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_764e1b147f88__2[3], 1);
+	var steps []string
+	for _, warning := range warnings {_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[6], 1);
+		switch {
+		case strings.Contains(warning, "not yet fully validated"),
+			strings.Contains(warning, "may not match this distribution"):_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[7], 1);
+			steps = append(steps, "Run `cli-helper env` to confirm which package-manager commands are available on this host.")
+		case strings.Contains(warning, "audit log path"):_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[8], 1);
+			steps = append(steps, "Set `NOSO_AUDIT_LOG_PATH` to a writable path if you want local audit logging.")
+		case strings.Contains(warning, "core commands missing"):_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[9], 1);
+			steps = append(steps, "Install the missing core commands to restore the corresponding intent coverage.")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[4], 1);if len(steps) == 0 && cfg.AuditLogPath != "" {_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[10], 1);
+		steps = append(steps, "Run `cli-helper env` to inspect optional tool coverage for extended domains.")
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__2[5], 1);return unique(steps)
+}
+
+func unique(values []string) []string {_cover_atomic_.StoreUint32(&goCover_764e1b147f88__3[0], 7) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__3[1], goCover_764e1b147f88_P) ; _cover_atomic_.StoreUint32(&goCover_764e1b147f88__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_764e1b147f88__3[3], 1);
+	var out []string
+	for _, value := range values {_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[5], 1);
+		seen := false
+		for _, existing := range out {_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[7], 1);
+			if existing == value {_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[8], 1);
+				seen = true
+				break
+			}
+		}
+		_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[6], 1);if !seen {_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[9], 1);
+			out = append(out, value)
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_764e1b147f88__3[4], 1);return out
+}
+
+var _ = _cover_atomic_.LoadUint32

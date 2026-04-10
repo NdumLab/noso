@@ -1,0 +1,161 @@
+//line /opt/noso/internal/registry/remote.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func sshVersionIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__82[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__82[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__82[2], 82) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__82[3], 1);
+	ev := collector.Lookup("ssh")
+	command := "ssh -V"
+	response := models.Response{
+		IntentID:       "inspect_ssh_version",
+		Command:        command,
+		Explanation:    "Shows the installed OpenSSH client version.",
+		ExpectedOutput: "OpenSSH client version information, typically printed on stderr.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ssh")
+	return response, nil
+}
+
+func sshConfigIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__83[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__83[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__83[2], 83) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__83[3], 1);
+	ev := collector.Lookup("ssh")
+	host := extractRemoteHost(query)
+	command := fmt.Sprintf("ssh -G %s", host)
+	response := models.Response{
+		IntentID:       "inspect_ssh_config",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the effective SSH client configuration for host %s without opening a session.", host),
+		ExpectedOutput: "Resolved SSH options such as hostname, port, user, identity file, and host key settings.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ssh")
+	return response, nil
+}
+
+func sshHostKeyIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__84[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__84[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__84[2], 84) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__84[3], 1);
+	ev := collector.Lookup("ssh-keyscan")
+	host := extractRemoteHost(query)
+	command := fmt.Sprintf("ssh-keyscan -T 5 %s", host)
+	response := models.Response{
+		IntentID:       "inspect_ssh_host_key",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Fetches the presented SSH host key for %s so you can review or pin it before connecting.", host),
+		ExpectedOutput: "One or more known_hosts-style lines containing the host key algorithms and public keys offered by the remote host.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ssh-keyscan")
+	return response, nil
+}
+
+func sshPortCheckIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__85[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__85[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__85[2], 85) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__85[3], 1);
+	ev := collector.Lookup("nc")
+	host := extractRemoteHost(query)
+	command := fmt.Sprintf("nc -zv %s 22", host)
+	response := models.Response{
+		IntentID:       "inspect_ssh_port_reachability",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Checks whether TCP port 22 on %s is reachable before troubleshooting SSH auth or key issues.", host),
+		ExpectedOutput: "A success or connection-refused style message showing whether the SSH port is reachable from this host.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "nc")
+	return response, nil
+}
+
+func rsyncDryRunIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__86[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__86[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__86[2], 86) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__86[3], 1);
+	ev := collector.Lookup("rsync")
+	source := extractTransferSource(query)
+	target := extractTransferTarget(query)
+	command := fmt.Sprintf("rsync -avhn %s %s", source, target)
+	response := models.Response{
+		IntentID:       "preview_rsync_transfer",
+		Command:        command,
+		Explanation:    "Runs rsync in archive, verbose, human-readable, and dry-run mode so you can preview which files would transfer.",
+		ExpectedOutput: "A dry-run file list plus transfer summary without copying any files.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "rsync")
+	return response, nil
+}
+
+func scpPreviewIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__87[0], 3) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__87[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__87[2], 87) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__87[3], 1);
+	source := extractTransferSource(query)
+	target := extractTransferTarget(query)
+	response, err := rsyncDryRunIntent("rsync "+source+" "+target, collector)
+	if err != nil {_cover_atomic_.AddUint32(&goCover_77581bebf097__87[5], 1);
+		return models.Response{}, err
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__87[4], 1);response.IntentID = "preview_scp_transfer"
+	response.Explanation = "SCP does not provide a true dry-run mode, so this uses an equivalent rsync dry-run preview before performing an SSH file copy."
+	response.Command = fmt.Sprintf("rsync -avhn %s %s", source, target)
+	response.ExpectedOutput = "A preview of which files would copy over SSH, without actually transferring them."
+	return response, nil
+}
+
+func extractRemoteHost(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__88[0], 9) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__88[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__88[2], 88) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__88[3], 1);
+	lower := strings.ToLower(query)
+	for _, marker := range []string{"for host ", "to "} {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[6], 1);
+		if idx := strings.Index(lower, marker); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[7], 1);
+			fields := strings.Fields(query[idx+len(marker):])
+			if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[8], 1);
+				return strings.Trim(fields[0], "`\"'")
+			}
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__88[4], 1);for _, marker := range []string{"host ", "ssh ", "remote "} {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[9], 1);
+		if idx := strings.Index(lower, marker); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[10], 1);
+			fields := strings.Fields(query[idx+len(marker):])
+			if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__88[11], 1);
+				return strings.Trim(fields[0], "`\"'")
+			}
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__88[5], 1);return "remote-host"
+}
+
+func extractTransferSource(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__89[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__89[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__89[2], 89) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__89[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, "copy "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__89[5], 1);
+		fields := strings.Fields(query[idx+len("copy "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__89[6], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__89[4], 1);return "source/"
+}
+
+func extractTransferTarget(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__90[0], 7) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__90[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__90[2], 90) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__90[3], 1);
+	lower := strings.ToLower(query)
+	if idx := strings.Index(lower, " to "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__90[6], 1);
+		fields := strings.Fields(query[idx+len(" to "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__90[7], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__90[4], 1);if idx := strings.Index(lower, " into "); idx >= 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__90[8], 1);
+		fields := strings.Fields(query[idx+len(" into "):])
+		if len(fields) > 0 {_cover_atomic_.AddUint32(&goCover_77581bebf097__90[9], 1);
+			return strings.Trim(fields[0], "`\"'")
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__90[5], 1);return "user@remote:/path/"
+}
+
+var _ = _cover_atomic_.LoadUint32

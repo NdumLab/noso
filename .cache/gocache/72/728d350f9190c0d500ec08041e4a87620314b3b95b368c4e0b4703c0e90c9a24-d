@@ -1,0 +1,4 @@
+covervars.go
+risk.cover.go
+./fuzz_test.go
+./risk_test.go

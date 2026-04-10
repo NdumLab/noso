@@ -1,0 +1,86 @@
+=== RUN   FuzzClassify
+=== RUN   FuzzClassify/seed#0
+=== RUN   FuzzClassify/seed#1
+=== RUN   FuzzClassify/seed#2
+=== RUN   FuzzClassify/seed#3
+=== RUN   FuzzClassify/seed#4
+=== RUN   FuzzClassify/seed#5
+=== RUN   FuzzClassify/seed#6
+=== RUN   FuzzClassify/seed#7
+=== RUN   FuzzClassify/seed#8
+=== RUN   FuzzClassify/seed#9
+=== RUN   FuzzClassify/seed#10
+=== RUN   FuzzClassify/seed#11
+=== RUN   FuzzClassify/seed#12
+=== RUN   FuzzClassify/seed#13
+=== RUN   FuzzClassify/seed#14
+=== RUN   FuzzClassify/seed#15
+=== RUN   FuzzClassify/seed#16
+=== RUN   FuzzClassify/seed#17
+=== RUN   FuzzClassify/seed#18
+=== RUN   FuzzClassify/seed#19
+=== RUN   FuzzClassify/seed#20
+=== RUN   FuzzClassify/seed#21
+=== RUN   FuzzClassify/seed#22
+=== RUN   FuzzClassify/seed#23
+=== RUN   FuzzClassify/seed#24
+=== RUN   FuzzClassify/seed#25
+=== RUN   FuzzClassify/seed#26
+=== RUN   FuzzClassify/seed#27
+=== RUN   FuzzClassify/seed#28
+=== RUN   FuzzClassify/seed#29
+=== RUN   FuzzClassify/seed#30
+=== RUN   FuzzClassify/seed#31
+=== RUN   FuzzClassify/seed#32
+=== RUN   FuzzClassify/seed#33
+=== RUN   FuzzClassify/seed#34
+=== RUN   FuzzClassify/seed#35
+=== RUN   FuzzClassify/seed#36
+=== RUN   FuzzClassify/seed#37
+=== RUN   FuzzClassify/seed#38
+=== RUN   FuzzClassify/seed#39
+=== RUN   FuzzClassify/seed#40
+--- PASS: FuzzClassify (0.00s)
+    --- PASS: FuzzClassify/seed#0 (0.00s)
+    --- PASS: FuzzClassify/seed#1 (0.00s)
+    --- PASS: FuzzClassify/seed#2 (0.00s)
+    --- PASS: FuzzClassify/seed#3 (0.00s)
+    --- PASS: FuzzClassify/seed#4 (0.00s)
+    --- PASS: FuzzClassify/seed#5 (0.00s)
+    --- PASS: FuzzClassify/seed#6 (0.00s)
+    --- PASS: FuzzClassify/seed#7 (0.00s)
+    --- PASS: FuzzClassify/seed#8 (0.00s)
+    --- PASS: FuzzClassify/seed#9 (0.00s)
+    --- PASS: FuzzClassify/seed#10 (0.00s)
+    --- PASS: FuzzClassify/seed#11 (0.00s)
+    --- PASS: FuzzClassify/seed#12 (0.00s)
+    --- PASS: FuzzClassify/seed#13 (0.00s)
+    --- PASS: FuzzClassify/seed#14 (0.00s)
+    --- PASS: FuzzClassify/seed#15 (0.00s)
+    --- PASS: FuzzClassify/seed#16 (0.00s)
+    --- PASS: FuzzClassify/seed#17 (0.00s)
+    --- PASS: FuzzClassify/seed#18 (0.00s)
+    --- PASS: FuzzClassify/seed#19 (0.00s)
+    --- PASS: FuzzClassify/seed#20 (0.00s)
+    --- PASS: FuzzClassify/seed#21 (0.00s)
+    --- PASS: FuzzClassify/seed#22 (0.00s)
+    --- PASS: FuzzClassify/seed#23 (0.00s)
+    --- PASS: FuzzClassify/seed#24 (0.00s)
+    --- PASS: FuzzClassify/seed#25 (0.00s)
+    --- PASS: FuzzClassify/seed#26 (0.00s)
+    --- PASS: FuzzClassify/seed#27 (0.00s)
+    --- PASS: FuzzClassify/seed#28 (0.00s)
+    --- PASS: FuzzClassify/seed#29 (0.00s)
+    --- PASS: FuzzClassify/seed#30 (0.00s)
+    --- PASS: FuzzClassify/seed#31 (0.00s)
+    --- PASS: FuzzClassify/seed#32 (0.00s)
+    --- PASS: FuzzClassify/seed#33 (0.00s)
+    --- PASS: FuzzClassify/seed#34 (0.00s)
+    --- PASS: FuzzClassify/seed#35 (0.00s)
+    --- PASS: FuzzClassify/seed#36 (0.00s)
+    --- PASS: FuzzClassify/seed#37 (0.00s)
+    --- PASS: FuzzClassify/seed#38 (0.00s)
+    --- PASS: FuzzClassify/seed#39 (0.00s)
+    --- PASS: FuzzClassify/seed#40 (0.00s)
+PASS
+ok  	noso/internal/safety	0.003s

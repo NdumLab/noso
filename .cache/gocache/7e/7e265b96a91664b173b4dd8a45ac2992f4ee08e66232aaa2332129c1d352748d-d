@@ -1,0 +1,69 @@
+//line /opt/noso/internal/audit/reader.go:1:1
+package audit; import _cover_atomic_ "sync/atomic"
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"os"
+	"strings"
+
+	"noso/pkg/models"
+)
+
+func ReadAll(path string) ([]models.AuditRecord, error) {_cover_atomic_.StoreUint32(&goCover_200d9f0fb767__2[0], 15) ; _cover_atomic_.StoreUint32(&goCover_200d9f0fb767__2[1], goCover_200d9f0fb767_P) ; _cover_atomic_.StoreUint32(&goCover_200d9f0fb767__2[2], 2) ; _cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[3], 1);
+	if path == "" {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[8], 1);
+		return nil, nil
+	}
+
+	_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[4], 1);f, err := os.Open(path)
+	if err != nil {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[9], 1);
+		if errors.Is(err, os.ErrNotExist) {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[11], 1);
+			return nil, nil
+		}
+		_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[10], 1);return nil, err
+	}
+	_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[5], 1);defer f.Close()
+
+	var records []models.AuditRecord
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[12], 1);
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[15], 1);
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[13], 1);var record models.AuditRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[16], 1);
+			// Skip malformed lines rather than aborting — a corrupt or
+			// truncated record at the end of the log should not prevent
+			// all history from being read.
+			continue
+		}
+		_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[14], 1);records = append(records, record)
+	}
+	_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[6], 1);if err := scanner.Err(); err != nil {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[17], 1);
+		return nil, err
+	}
+	_cover_atomic_.AddUint32(&goCover_200d9f0fb767__2[7], 1);return records, nil
+}
+
+func Filter(records []models.AuditRecord, query string, limit int) []models.AuditRecord {_cover_atomic_.StoreUint32(&goCover_200d9f0fb767__3[0], 7) ; _cover_atomic_.StoreUint32(&goCover_200d9f0fb767__3[1], goCover_200d9f0fb767_P) ; _cover_atomic_.StoreUint32(&goCover_200d9f0fb767__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[3], 1);
+	query = strings.ToLower(strings.TrimSpace(query))
+	var filtered []models.AuditRecord
+	for i := len(records) - 1; i >= 0; i-- {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[5], 1);
+		record := records[i]
+		if query != "" {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[7], 1);
+			blob := strings.ToLower(record.Query + "\n" + record.Response.IntentID + "\n" + record.Response.Command)
+			if !strings.Contains(blob, query) {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[8], 1);
+				continue
+			}
+		}
+		_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[6], 1);filtered = append(filtered, record)
+		if limit > 0 && len(filtered) >= limit {_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[9], 1);
+			break
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_200d9f0fb767__3[4], 1);return filtered
+}
+
+var _ = _cover_atomic_.LoadUint32

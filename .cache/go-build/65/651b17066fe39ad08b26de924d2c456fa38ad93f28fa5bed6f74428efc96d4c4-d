@@ -1,0 +1,12 @@
+./containerd.go
+./git.go
+./helm.go
+./helpers.go
+./intents.go
+./k8s.go
+./linux.go
+./runtime.go
+./helm_test.go
+./intents_test.go
+./k8s_test.go
+./runtime_test.go

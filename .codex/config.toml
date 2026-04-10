@@ -1,0 +1,13 @@
+model = "gpt-5.4"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+# Let Codex treat README.txt as a fallback project instruction file
+project_doc_fallback_filenames = ["README.txt"]
+
+# Optional: allow more instruction text if your AGENTS/README are long
+project_doc_max_bytes = 65536
+
+# Optional: if your builds need network while in workspace-write mode
+[sandbox_workspace_write]
+network_access = true

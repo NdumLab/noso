@@ -1,0 +1,48 @@
+//line /opt/noso/internal/runbook/render.go:1:1
+package runbook; import _cover_atomic_ "sync/atomic"
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+)
+
+func Render(report Report, format string) (string, error) {_cover_atomic_.StoreUint32(&goCover_80de5a641882__3[0], 6) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__3[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__3[2], 3) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__3[3], 1);
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "", "markdown", "md":_cover_atomic_.AddUint32(&goCover_80de5a641882__3[4], 1);
+		return renderMarkdown(report), nil
+	case "json":_cover_atomic_.AddUint32(&goCover_80de5a641882__3[5], 1);
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {_cover_atomic_.AddUint32(&goCover_80de5a641882__3[8], 1);
+			return "", err
+		}
+		_cover_atomic_.AddUint32(&goCover_80de5a641882__3[6], 1);return string(data) + "\n", nil
+	default:_cover_atomic_.AddUint32(&goCover_80de5a641882__3[7], 1);
+		return "", fmt.Errorf("unsupported runbook format: %s", format)
+	}
+}
+
+func renderMarkdown(report Report) string {_cover_atomic_.StoreUint32(&goCover_80de5a641882__4[0], 1) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__4[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__4[2], 4) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__4[3], 1);
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", report.Title)
+	fmt.Fprintf(&b, "## Summary\n\n%s\n\n", report.Summary)
+	writeList(&b, "Queries", report.Queries)
+	writeList(&b, "Commands Used", report.Commands)
+	writeList(&b, "Findings", report.Findings)
+	writeList(&b, "Warnings", report.Warnings)
+	writeList(&b, "Suggested Next Steps", report.NextSteps)
+	return b.String()
+}
+
+func writeList(b *strings.Builder, title string, items []string) {_cover_atomic_.StoreUint32(&goCover_80de5a641882__5[0], 5) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__5[1], goCover_80de5a641882_P) ; _cover_atomic_.StoreUint32(&goCover_80de5a641882__5[2], 5) ; _cover_atomic_.AddUint32(&goCover_80de5a641882__5[3], 1);
+	if len(items) == 0 {_cover_atomic_.AddUint32(&goCover_80de5a641882__5[6], 1);
+		return
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__5[4], 1);fmt.Fprintf(b, "## %s\n\n", title)
+	for _, item := range items {_cover_atomic_.AddUint32(&goCover_80de5a641882__5[7], 1);
+		fmt.Fprintf(b, "- %s\n", item)
+	}
+	_cover_atomic_.AddUint32(&goCover_80de5a641882__5[5], 1);b.WriteString("\n")
+}
+
+var _ = _cover_atomic_.LoadUint32

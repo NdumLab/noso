@@ -1,0 +1,11 @@
+./ansible.go
+./containerd.go
+./git.go
+./helm.go
+./helpers.go
+./intents.go
+./k8s.go
+./linux.go
+./remote.go
+./runtime.go
+./terraform.go

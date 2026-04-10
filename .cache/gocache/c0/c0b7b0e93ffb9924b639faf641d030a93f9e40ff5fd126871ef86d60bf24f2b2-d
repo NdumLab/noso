@@ -1,0 +1,64 @@
+=== RUN   FuzzResolve
+=== RUN   FuzzResolve/seed#0
+=== RUN   FuzzResolve/seed#1
+=== RUN   FuzzResolve/seed#2
+=== RUN   FuzzResolve/seed#3
+=== RUN   FuzzResolve/seed#4
+=== RUN   FuzzResolve/seed#5
+=== RUN   FuzzResolve/seed#6
+=== RUN   FuzzResolve/seed#7
+=== RUN   FuzzResolve/seed#8
+=== RUN   FuzzResolve/seed#9
+=== RUN   FuzzResolve/seed#10
+=== RUN   FuzzResolve/seed#11
+=== RUN   FuzzResolve/seed#12
+=== RUN   FuzzResolve/seed#13
+=== RUN   FuzzResolve/seed#14
+=== RUN   FuzzResolve/seed#15
+=== RUN   FuzzResolve/seed#16
+=== RUN   FuzzResolve/seed#17
+=== RUN   FuzzResolve/seed#18
+=== RUN   FuzzResolve/seed#19
+=== RUN   FuzzResolve/seed#20
+=== RUN   FuzzResolve/seed#21
+=== RUN   FuzzResolve/seed#22
+=== RUN   FuzzResolve/seed#23
+=== RUN   FuzzResolve/seed#24
+=== RUN   FuzzResolve/seed#25
+=== RUN   FuzzResolve/seed#26
+=== RUN   FuzzResolve/seed#27
+=== RUN   FuzzResolve/seed#28
+=== RUN   FuzzResolve/seed#29
+--- PASS: FuzzResolve (0.40s)
+    --- PASS: FuzzResolve/seed#0 (0.01s)
+    --- PASS: FuzzResolve/seed#1 (0.00s)
+    --- PASS: FuzzResolve/seed#2 (0.00s)
+    --- PASS: FuzzResolve/seed#3 (0.01s)
+    --- PASS: FuzzResolve/seed#4 (0.01s)
+    --- PASS: FuzzResolve/seed#5 (0.00s)
+    --- PASS: FuzzResolve/seed#6 (0.00s)
+    --- PASS: FuzzResolve/seed#7 (0.00s)
+    --- PASS: FuzzResolve/seed#8 (0.00s)
+    --- PASS: FuzzResolve/seed#9 (0.01s)
+    --- PASS: FuzzResolve/seed#10 (0.00s)
+    --- PASS: FuzzResolve/seed#11 (0.01s)
+    --- PASS: FuzzResolve/seed#12 (0.01s)
+    --- PASS: FuzzResolve/seed#13 (0.01s)
+    --- PASS: FuzzResolve/seed#14 (0.00s)
+    --- PASS: FuzzResolve/seed#15 (0.00s)
+    --- PASS: FuzzResolve/seed#16 (0.00s)
+    --- PASS: FuzzResolve/seed#17 (0.00s)
+    --- PASS: FuzzResolve/seed#18 (0.00s)
+    --- PASS: FuzzResolve/seed#19 (0.00s)
+    --- PASS: FuzzResolve/seed#20 (0.01s)
+    --- PASS: FuzzResolve/seed#21 (0.01s)
+    --- PASS: FuzzResolve/seed#22 (0.00s)
+    --- PASS: FuzzResolve/seed#23 (0.00s)
+    --- PASS: FuzzResolve/seed#24 (0.01s)
+    --- PASS: FuzzResolve/seed#25 (0.00s)
+    --- PASS: FuzzResolve/seed#26 (0.00s)
+    --- PASS: FuzzResolve/seed#27 (0.31s)
+    --- PASS: FuzzResolve/seed#28 (0.00s)
+    --- PASS: FuzzResolve/seed#29 (0.00s)
+PASS
+ok  	noso/internal/registry	0.405s

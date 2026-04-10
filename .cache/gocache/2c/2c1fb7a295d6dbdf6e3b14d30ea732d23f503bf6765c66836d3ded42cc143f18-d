@@ -1,0 +1,136 @@
+//line /opt/noso/internal/registry/hardware.go:1:1
+package registry; import _cover_atomic_ "sync/atomic"
+
+import (
+	"fmt"
+	"strings"
+
+	"noso/internal/evidence"
+	"noso/internal/safety"
+	"noso/pkg/models"
+)
+
+func cpuInfoIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__36[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__36[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__36[2], 36) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__36[3], 1);
+	ev := collector.Lookup("lscpu")
+	command := "lscpu"
+	response := models.Response{
+		IntentID:       "inspect_cpu_info",
+		Command:        command,
+		Explanation:    "Shows CPU architecture, model, socket, core, thread, and virtualization details from the local host.",
+		ExpectedOutput: "A CPU summary with architecture, model name, CPU count, sockets, cores per socket, threads, caches, and virtualization flags.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "lscpu")
+	return response, nil
+}
+
+func memoryInfoIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__37[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__37[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__37[2], 37) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__37[3], 1);
+	ev := collector.Lookup("free")
+	command := "free -h"
+	response := models.Response{
+		IntentID:       "inspect_memory_info",
+		Command:        command,
+		Explanation:    "Shows memory and swap totals, usage, and available memory in human-readable units.",
+		ExpectedOutput: "A table with total, used, free, shared, buff or cache, available memory, and swap usage.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "free")
+	return response, nil
+}
+
+func blockDevicesIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__38[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__38[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__38[2], 38) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__38[3], 1);
+	ev := collector.Lookup("lsblk")
+	command := "lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT"
+	response := models.Response{
+		IntentID:       "inspect_block_devices",
+		Command:        command,
+		Explanation:    "Lists block devices, their sizes, types, filesystems, and mountpoints so you can inspect disk layout safely.",
+		ExpectedOutput: "A table of disks, partitions, and logical volumes with size, type, filesystem, and mountpoint columns.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "lsblk")
+	return response, nil
+}
+
+func systemHardwareIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__39[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__39[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__39[2], 39) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__39[3], 1);
+	ev := collector.Lookup("dmidecode")
+	command := "dmidecode -t system"
+	response := models.Response{
+		IntentID:       "inspect_system_hardware",
+		Command:        command,
+		Explanation:    "Shows vendor, product, serial, UUID, and other SMBIOS system identity details. Some systems require elevated privileges to read it.",
+		ExpectedOutput: "A system information block with vendor, product name, version, serial number, UUID, and wake-up type.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "dmidecode")
+	return response, nil
+}
+
+func diskHealthIntent(query string, collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__40[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__40[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__40[2], 40) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__40[3], 1);
+	ev := collector.Lookup("smartctl")
+	device := extractDevicePath(query)
+	command := fmt.Sprintf("smartctl -H %s", device)
+	response := models.Response{
+		IntentID:       "inspect_disk_health",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Shows the overall SMART health assessment for %s without modifying the device.", device),
+		ExpectedOutput: "A SMART status line reporting whether the device passed the overall health self-assessment.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "smartctl")
+	return response, nil
+}
+
+func ipmiInfoIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__41[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__41[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__41[2], 41) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__41[3], 1);
+	ev := collector.Lookup("ipmitool")
+	command := "ipmitool mc info"
+	response := models.Response{
+		IntentID:       "inspect_ipmi_info",
+		Command:        command,
+		Explanation:    "Shows basic BMC or IPMI management-controller information such as firmware revision and manufacturer ID.",
+		ExpectedOutput: "A controller information block with device ID, firmware revision, manufacturer, and supported IPMI version.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "ipmitool")
+	return response, nil
+}
+
+func gpuInfoIntent(collector evidence.Collector) (models.Response, error) {_cover_atomic_.StoreUint32(&goCover_77581bebf097__42[0], 1) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__42[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__42[2], 42) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__42[3], 1);
+	ev := collector.Lookup("nvidia-smi")
+	command := "nvidia-smi"
+	response := models.Response{
+		IntentID:       "inspect_gpu_info",
+		Command:        command,
+		Explanation:    "Shows NVIDIA GPU inventory, driver state, utilization, memory usage, and active compute processes.",
+		ExpectedOutput: "A GPU summary table with model names, driver and CUDA versions, temperature, power draw, memory usage, utilization, and active processes.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "nvidia-smi")
+	return response, nil
+}
+
+func extractDevicePath(query string) string {_cover_atomic_.StoreUint32(&goCover_77581bebf097__43[0], 4) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__43[1], goCover_77581bebf097_P) ; _cover_atomic_.StoreUint32(&goCover_77581bebf097__43[2], 43) ; _cover_atomic_.AddUint32(&goCover_77581bebf097__43[3], 1);
+	for _, field := range strings.Fields(query) {_cover_atomic_.AddUint32(&goCover_77581bebf097__43[5], 1);
+		trimmed := strings.Trim(field, "`\"'")
+		if strings.HasPrefix(trimmed, "/dev/") {_cover_atomic_.AddUint32(&goCover_77581bebf097__43[6], 1);
+			return trimmed
+		}
+	}
+	_cover_atomic_.AddUint32(&goCover_77581bebf097__43[4], 1);return "/dev/sda"
+}
+
+var _ = _cover_atomic_.LoadUint32
