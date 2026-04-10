@@ -1,0 +1,13 @@
+# Build output
+/bin/
+/cli-helper
+coverage.out
+
+# Bundled toolchain — not committed; scripts fall back to go in PATH
+.tools/
+
+# Dev / AI-agent artifacts
+.codex/
+AGENTS.md
+README.txt
+work-progress.txt

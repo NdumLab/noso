@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    name: Build, vet, and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        run: go build ./...
+
+      - name: Build binary
+        run: go build -o cli-helper ./cmd/cli-helper
+
+      - name: Smoke test binary
+        run: |
+          # version subcommand must exit 0 and emit the version= tag
+          ./cli-helper version | grep -q "version="
+
+          # query mode must return a Command: line
+          ./cli-helper "show disk free space" | grep -q "Command:"
+
+          # --json flag must produce valid JSON with a non-empty command field
+          ./cli-helper --json "show disk free space" \
+            | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          assert d.get('command'), 'command field missing or empty in JSON output'
+          "
+
+          # doctor subcommand must exit 0 and report a distro family
+          ./cli-helper doctor | grep -q "distro family:"
+
+          # interpret mode must parse df -h output and return an intent
+          printf 'Filesystem Size Used Avail Use%%\n/dev/sda1 20G 15G 5G 75%%\n' \
+            | ./cli-helper interpret --command "df -h" | grep -q "interpret_df"
+
+          # unknown query must exit 3 (ExitNoIntent), not crash
+          ./cli-helper "xyzzy_no_such_query_sentinel" ; test $? -eq 3
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Static analysis
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@v0.7.0
+          staticcheck ./...
+
+      - name: Test (with race detector)
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep "total:" | awk '{print $3}' | tr -d '%')
+          echo "Total coverage: ${COVERAGE}%"
+          if (( $(echo "${COVERAGE} < 65" | bc -l) )); then
+            echo "::error::Coverage ${COVERAGE}% is below the 65% threshold"
+            exit 1
+          fi
+
+      - name: Fuzz seed corpus
+        run: |
+          go test -run=FuzzClassify ./internal/safety/
+          go test -run=FuzzResolve  ./internal/registry/
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build release binaries
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          COMMIT="${GITHUB_SHA::8}"
+          DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          LDFLAGS="-X github.com/noso-dev/noso/pkg/buildinfo.Version=${VERSION} \
+                   -X github.com/noso-dev/noso/pkg/buildinfo.Commit=${COMMIT} \
+                   -X github.com/noso-dev/noso/pkg/buildinfo.Date=${DATE}"
+          mkdir -p dist
+          for GOARCH in amd64 arm64; do
+            OUT="dist/cli-helper-linux-${GOARCH}"
+            GOOS=linux GOARCH=${GOARCH} go build -ldflags "${LDFLAGS}" \
+              -o "${OUT}" ./cmd/cli-helper
+            echo "Built ${OUT}"
+          done
+          cd dist && sha256sum cli-helper-* > SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/cli-helper-linux-amd64
+            dist/cli-helper-linux-arm64
+            dist/SHA256SUMS
+          generate_release_notes: true
