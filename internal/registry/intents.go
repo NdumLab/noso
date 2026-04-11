@@ -100,6 +100,23 @@ var (
 	// Word-boundary ping: avoids matching words like "shipping" that contain
 	// "ping" as a substring.
 	pingIntentRegex = regexp.MustCompile(`\bping\b`)
+
+	// Git push
+	gitPushRegex = regexp.MustCompile(`\bgit\s+push\b|push\s+(?:my\s+)?(?:git\s+)?(?:commits?|changes?)`)
+
+	// Service control: restart/start/stop/enable/disable <service>
+	serviceControlRegex = regexp.MustCompile(`\b(restart|start|stop|enable|disable)\s+(?:the\s+)?([a-zA-Z0-9_.@-]+)`)
+
+	// Package install: "install curl", "install package nginx"
+	packageInstallRegex = regexp.MustCompile(`\binstall\s+(?:package\s+)?([a-zA-Z0-9+_-][a-zA-Z0-9+_.-]*)`)
+
+	// DNS lookup: extract host from "nslookup example.com", "dig 8.8.8.8",
+	// "dns lookup for google.com", "lookup example.com"
+	dnsLookupRegex  = regexp.MustCompile(`\b(?:nslookup|dns\s+lookup|resolve\s+(?:dns|hostname))\b`)
+	dnsHostExtract  = regexp.MustCompile(`\b(?:nslookup|dig|lookup|resolve)\s+(?:dns\s+(?:for\s+)?|hostname\s+|for\s+)?([a-zA-Z0-9][a-zA-Z0-9._:-]*)`)
+
+	// Cron jobs
+	cronListRegex = regexp.MustCompile(`(?:list|show|view)\s+cron(?:tab)?(?:\s+jobs?)?|crontab\s+-l|\bschedule(?:d)?\s+(?:tasks?|jobs?)\b`)
 )
 
 func Resolve(query string, env models.Environment, collector evidence.Collector) (models.Response, error) {
@@ -295,8 +312,18 @@ func Resolve(query string, env models.Environment, collector evidence.Collector)
 		return packageInfoIntent(query, env, collector)
 	case strings.Contains(normalized, "git status") || strings.HasPrefix(normalized, "status of git"):
 		return gitStatusIntent(env, collector)
+	case gitPushRegex.MatchString(normalized):
+		return gitPushIntent(collector)
 	case strings.Contains(normalized, "grep ") || strings.Contains(normalized, "search for") || strings.Contains(normalized, "find ") && strings.Contains(normalized, " in "):
 		return grepIntent(query, collector)
+	case dnsLookupRegex.MatchString(normalized) || (strings.Contains(normalized, "dig ") && strings.Contains(normalized, ".")):
+		return dnsLookupIntent(query, collector)
+	case cronListRegex.MatchString(normalized):
+		return cronListIntent(collector)
+	case packageInstallRegex.MatchString(normalized) && !strings.Contains(normalized, "package info") && !strings.Contains(normalized, "package details"):
+		return packageInstallIntent(query, env, collector)
+	case serviceControlRegex.MatchString(normalized) && !strings.Contains(normalized, "status") && !strings.Contains(normalized, "logs"):
+		return serviceControlIntent(query, collector)
 	default:
 		return models.Response{
 			IntentID:       "unsupported_query",

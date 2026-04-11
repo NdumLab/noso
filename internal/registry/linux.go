@@ -311,6 +311,145 @@ func packageInfoIntent(query string, env models.Environment, collector evidence.
 	return response, nil
 }
 
+func serviceControlIntent(query string, collector evidence.Collector) (models.Response, error) {
+	action := "restart"
+	service := "nginx"
+	if matches := serviceControlRegex.FindStringSubmatch(strings.ToLower(query)); len(matches) == 3 {
+		action = matches[1]
+		service = matches[2]
+	}
+
+	ev := collector.Lookup("systemctl")
+	command := fmt.Sprintf("systemctl %s %s", action, service)
+
+	var explanation string
+	switch action {
+	case "restart":
+		explanation = fmt.Sprintf("Stops and immediately restarts the %s service. Any existing connections handled by the service will be dropped during the restart window.", service)
+	case "start":
+		explanation = fmt.Sprintf("Starts the %s service if it is not already running. Has no effect if the service is already active.", service)
+	case "stop":
+		explanation = fmt.Sprintf("Stops the %s service. It will not restart automatically unless a watchdog or dependency restarts it.", service)
+	case "enable":
+		explanation = fmt.Sprintf("Marks %s to start automatically at boot. Does not start the service immediately.", service)
+	case "disable":
+		explanation = fmt.Sprintf("Prevents %s from starting automatically at boot. Does not stop the service if it is currently running.", service)
+	default:
+		explanation = fmt.Sprintf("Runs systemctl %s on the %s unit.", action, service)
+	}
+
+	response := models.Response{
+		IntentID:       "control_service",
+		Command:        command,
+		Explanation:    explanation,
+		ExpectedOutput: fmt.Sprintf("No output on success. Run 'systemctl status %s' to confirm the new state.", service),
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+		NextSteps:      []string{fmt.Sprintf("Run 'systemctl status %s --no-pager -l' to confirm the service reached the expected state.", service)},
+	}
+	addHelpEvidence(&response, ev, "systemctl")
+	return response, nil
+}
+
+func packageInstallIntent(query string, env models.Environment, collector evidence.Collector) (models.Response, error) {
+	pkg := "curl"
+	if matches := packageInstallRegex.FindStringSubmatch(strings.ToLower(query)); len(matches) == 2 {
+		pkg = matches[1]
+	}
+
+	type pkgSpec struct {
+		tool, command, explanation string
+	}
+	var spec pkgSpec
+	switch env.PackageManager {
+	case "apt":
+		spec = pkgSpec{
+			tool:        "apt-get",
+			command:     fmt.Sprintf("apt-get install -y %s", pkg),
+			explanation: fmt.Sprintf("Installs %s and its dependencies from the configured apt repositories.", pkg),
+		}
+	case "pacman":
+		spec = pkgSpec{
+			tool:        "pacman",
+			command:     fmt.Sprintf("pacman -S --noconfirm %s", pkg),
+			explanation: fmt.Sprintf("Installs %s from the pacman package database.", pkg),
+		}
+	case "zypper":
+		spec = pkgSpec{
+			tool:        "zypper",
+			command:     fmt.Sprintf("zypper install -y %s", pkg),
+			explanation: fmt.Sprintf("Installs %s from the configured zypper repositories.", pkg),
+		}
+	default: // dnf
+		spec = pkgSpec{
+			tool:        "dnf",
+			command:     fmt.Sprintf("dnf install -y %s", pkg),
+			explanation: fmt.Sprintf("Installs %s and its dependencies from the configured dnf repositories.", pkg),
+		}
+	}
+
+	ev := collector.Lookup(spec.tool)
+	response := models.Response{
+		IntentID:       "install_package",
+		Command:        spec.command,
+		Explanation:    spec.explanation,
+		ExpectedOutput: fmt.Sprintf("Download progress, dependency resolution, and a summary confirming %s is installed.", pkg),
+		Risk:           safety.Classify(spec.command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+		NextSteps:      []string{fmt.Sprintf("Verify with: command -v %s", pkg)},
+	}
+	addHelpEvidence(&response, ev, spec.tool)
+	return response, nil
+}
+
+func dnsLookupIntent(query string, collector evidence.Collector) (models.Response, error) {
+	host := "example.com"
+	if matches := dnsHostExtract.FindStringSubmatch(strings.ToLower(query)); len(matches) == 2 && matches[1] != "" {
+		host = matches[1]
+	}
+
+	ev := collector.Lookup("dig")
+	command := fmt.Sprintf("dig +short %s", host)
+	if !ev.Exists {
+		evNs := collector.Lookup("nslookup")
+		if evNs.Exists {
+			command = fmt.Sprintf("nslookup %s", host)
+			ev = evNs
+		}
+	}
+
+	response := models.Response{
+		IntentID:       "inspect_dns_lookup",
+		Command:        command,
+		Explanation:    fmt.Sprintf("Resolves the DNS records for %s and returns the associated IP addresses.", host),
+		ExpectedOutput: fmt.Sprintf("One IP address per line for %s, or an empty response if the name does not resolve.", host),
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+	}
+	addHelpEvidence(&response, ev, "dig")
+	return response, nil
+}
+
+func cronListIntent(collector evidence.Collector) (models.Response, error) {
+	ev := collector.Lookup("crontab")
+	command := "crontab -l"
+	response := models.Response{
+		IntentID:       "inspect_cron_jobs",
+		Command:        command,
+		Explanation:    "Lists the cron jobs for the current user. System-wide jobs live in /etc/cron.d/ and /etc/crontab.",
+		ExpectedOutput: "One cron expression per scheduled job, or 'no crontab for <user>' if none are configured.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+		NextSteps:      []string{"To see system-wide jobs: cat /etc/crontab && ls /etc/cron.d/"},
+	}
+	addHelpEvidence(&response, ev, "crontab")
+	return response, nil
+}
+
 func grepIntent(query string, collector evidence.Collector) (models.Response, error) {
 	needle := "error"
 	path := "/var/log"

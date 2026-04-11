@@ -301,3 +301,173 @@ func TestResolveContainerdVersionIntent(t *testing.T) {
 		t.Fatal("Command should not be empty")
 	}
 }
+
+func TestResolveServiceRestartIntent(t *testing.T) {
+	cases := []struct {
+		query   string
+		service string
+		action  string
+	}{
+		{"restart nginx", "nginx", "restart"},
+		{"restart the sshd service", "sshd", "restart"},
+		{"stop apache2", "apache2", "stop"},
+		{"start postgresql", "postgresql", "start"},
+		{"enable firewalld", "firewalld", "enable"},
+		{"disable chronyd", "chronyd", "disable"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			resp, err := Resolve(tc.query, models.Environment{}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resp.IntentID != "control_service" {
+				t.Fatalf("IntentID = %q, want control_service", resp.IntentID)
+			}
+			if !strings.Contains(resp.Command, tc.action) {
+				t.Errorf("Command %q does not contain action %q", resp.Command, tc.action)
+			}
+			if !strings.Contains(resp.Command, tc.service) {
+				t.Errorf("Command %q does not contain service %q", resp.Command, tc.service)
+			}
+			if resp.Risk == "" {
+				t.Error("Risk should not be empty")
+			}
+		})
+	}
+}
+
+func TestResolveServiceControlDoesNotClobberStatus(t *testing.T) {
+	// "nginx service status" must still resolve to inspect_service_status, not control_service
+	resp, err := Resolve("nginx service status", models.Environment{}, evidence.NewCollector())
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resp.IntentID != "inspect_service_status" {
+		t.Fatalf("IntentID = %q, want inspect_service_status", resp.IntentID)
+	}
+}
+
+func TestResolveGitPushIntent(t *testing.T) {
+	cases := []string{"git push", "push git changes", "push my commits"}
+	for _, q := range cases {
+		t.Run(q, func(t *testing.T) {
+			resp, err := Resolve(q, models.Environment{}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resp.IntentID != "push_git_changes" {
+				t.Fatalf("IntentID = %q, want push_git_changes", resp.IntentID)
+			}
+			if resp.Command != "git push" {
+				t.Errorf("Command = %q, want 'git push'", resp.Command)
+			}
+			// Must warn about force-push risk
+			found := false
+			for _, w := range resp.Warnings {
+				if strings.Contains(w, "force") {
+					found = true
+				}
+			}
+			if !found {
+				t.Error("expected force-push warning in Warnings")
+			}
+		})
+	}
+}
+
+func TestResolvePackageInstallIntent(t *testing.T) {
+	cases := []struct {
+		query string
+		pkg   string
+	}{
+		{"install curl", "curl"},
+		{"install package nginx", "nginx"},
+		{"install openssl", "openssl"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			resp, err := Resolve(tc.query, models.Environment{PackageManager: "dnf"}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resp.IntentID != "install_package" {
+				t.Fatalf("IntentID = %q, want install_package", resp.IntentID)
+			}
+			if !strings.Contains(resp.Command, tc.pkg) {
+				t.Errorf("Command %q does not contain package %q", resp.Command, tc.pkg)
+			}
+		})
+	}
+}
+
+func TestResolvePackageInstallDistroAware(t *testing.T) {
+	cases := []struct {
+		pm      string
+		wantPfx string
+	}{
+		{"dnf", "dnf install"},
+		{"apt", "apt-get install"},
+		{"pacman", "pacman -S"},
+		{"zypper", "zypper install"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.pm, func(t *testing.T) {
+			resp, err := Resolve("install curl", models.Environment{PackageManager: tc.pm}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if !strings.HasPrefix(resp.Command, tc.wantPfx) {
+				t.Errorf("Command = %q, want prefix %q", resp.Command, tc.wantPfx)
+			}
+		})
+	}
+}
+
+func TestResolveDNSLookupIntent(t *testing.T) {
+	cases := []struct {
+		query string
+		host  string
+	}{
+		{"nslookup example.com", "example.com"},
+		{"dns lookup for google.com", "google.com"},
+		{"dig 8.8.8.8", "8.8.8.8"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.query, func(t *testing.T) {
+			resp, err := Resolve(tc.query, models.Environment{}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resp.IntentID != "inspect_dns_lookup" {
+				t.Fatalf("IntentID = %q, want inspect_dns_lookup", resp.IntentID)
+			}
+			if !strings.Contains(resp.Command, tc.host) {
+				t.Errorf("Command %q does not contain host %q", resp.Command, tc.host)
+			}
+		})
+	}
+}
+
+func TestResolveCronListIntent(t *testing.T) {
+	cases := []string{
+		"list cron jobs",
+		"show crontab",
+		"view cron",
+		"list scheduled tasks",
+	}
+	for _, q := range cases {
+		t.Run(q, func(t *testing.T) {
+			resp, err := Resolve(q, models.Environment{}, evidence.NewCollector())
+			if err != nil {
+				t.Fatalf("Resolve() error = %v", err)
+			}
+			if resp.IntentID != "inspect_cron_jobs" {
+				t.Fatalf("IntentID = %q, want inspect_cron_jobs", resp.IntentID)
+			}
+			if resp.Command != "crontab -l" {
+				t.Errorf("Command = %q, want 'crontab -l'", resp.Command)
+			}
+		})
+	}
+}

@@ -57,6 +57,24 @@ func gitDiffIntent(collector evidence.Collector) (models.Response, error) {
 	return response, nil
 }
 
+func gitPushIntent(collector evidence.Collector) (models.Response, error) {
+	ev := collector.Lookup("git")
+	command := "git push"
+	response := models.Response{
+		IntentID:       "push_git_changes",
+		Command:        command,
+		Explanation:    "Pushes committed changes on the current branch to its configured upstream remote.",
+		ExpectedOutput: "Progress lines ending with a summary of the ref that was updated, e.g. 'main -> main'.",
+		Risk:           safety.Classify(command),
+		Confidence:     confidenceFor(ev),
+		VerifiedFrom:   append([]string{}, ev.VerificationSources...),
+		NextSteps:      []string{"Run 'git status' first to confirm all intended commits are included before pushing."},
+		Warnings:       []string{"Avoid 'git push --force' on shared branches — it rewrites remote history and can cause data loss for other contributors."},
+	}
+	addHelpEvidence(&response, ev, "git")
+	return response, nil
+}
+
 func gitBranchIntent(collector evidence.Collector) (models.Response, error) {
 	ev := collector.Lookup("git")
 	command := "git branch -vv"
