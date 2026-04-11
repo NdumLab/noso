@@ -48,8 +48,13 @@ jobs:
           printf 'Filesystem Size Used Avail Use%%\n/dev/sda1 20G 15G 5G 75%%\n' \
             | ./cli-helper interpret --command "df -h" | grep -q "interpret_df"
 
-          # unknown query must exit 3 (ExitNoIntent), not crash
-          ./cli-helper "xyzzy_no_such_query_sentinel" ; test $? -eq 3
+          # unknown query must exit 3 (ExitNoIntent), not crash.
+          # Avoid tripping `set -e` before we can assert the exit code.
+          set +e
+          ./cli-helper "xyzzy_no_such_query_sentinel"
+          status=$?
+          set -e
+          test "${status}" -eq 3
 
       - name: Vet
         run: go vet ./...
