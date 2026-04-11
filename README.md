@@ -17,25 +17,36 @@ Next step:    Run journalctl -u <service> if the owning process is a systemd uni
 
 ### Download a release binary (Linux, no Go required)
 
+Choose the binary for your architecture:
+
+- **amd64** — most Intel and AMD 64-bit Linux systems (servers, desktops, most cloud VMs)
+- **arm64** — ARM 64-bit systems (AWS Graviton, Raspberry Pi 4+, Ampere)
+
 ```bash
-# amd64
+# Intel/AMD 64-bit
 curl -Lo cli-helper https://github.com/NdumLab/noso/releases/latest/download/cli-helper-linux-amd64
+
+# Verify the checksum before installing
+curl -sL https://github.com/NdumLab/noso/releases/latest/download/SHA256SUMS \
+  | sha256sum --check --ignore-missing
+
 chmod +x cli-helper
 sudo mv cli-helper /usr/local/bin/
 ```
 
 ```bash
-# arm64
+# ARM 64-bit
 curl -Lo cli-helper https://github.com/NdumLab/noso/releases/latest/download/cli-helper-linux-arm64
+
+# Verify the checksum before installing
+curl -sL https://github.com/NdumLab/noso/releases/latest/download/SHA256SUMS \
+  | sha256sum --check --ignore-missing
+
 chmod +x cli-helper
 sudo mv cli-helper /usr/local/bin/
 ```
 
-Verify the download matches the published checksum:
-
-```bash
-curl -sL https://github.com/NdumLab/noso/releases/latest/download/SHA256SUMS | sha256sum --check --ignore-missing
-```
+The checksum step downloads the `SHA256SUMS` file published alongside each release and checks that your downloaded binary matches. You should see `cli-helper-linux-amd64: OK` (or `arm64`) before proceeding. If the check fails, delete the file and re-download.
 
 ### Install with `go install`
 
@@ -53,6 +64,7 @@ Requires Go 1.22 or later.
 git clone https://github.com/NdumLab/noso
 cd noso
 go build -o cli-helper ./cmd/cli-helper
+sudo mv cli-helper /usr/local/bin/
 ```
 
 ## Quick start
@@ -136,7 +148,7 @@ cli-helper runbook --match nginx --format json
 
 ```bash
 cli-helper version
-# version=v1.2.0 commit=abc1234 date=2026-04-10T12:00:00Z go=go1.22.0
+# version=v0.1.0 commit=abc1234 date=2026-04-10T12:00:00Z go=go1.22.5
 ```
 
 ### `completion` — shell completion
@@ -199,12 +211,14 @@ Every query is appended as a JSON line to the audit log. The log directory is cr
 
 `cli-helper` is a read-only advisory tool. It does not run the commands it suggests. Evidence about installed tools is gathered through `exec.LookPath` and direct binary invocation — no shell intermediary is used. See [SECURITY.md](SECURITY.md) for the vulnerability reporting process and full security design notes.
 
-## Coverage and CI
+## Contributing
 
-The test suite runs with the race detector and enforces a 65% statement-coverage floor. Release binaries are built for `linux/amd64` and `linux/arm64` on every version tag.
+Release binaries for `linux/amd64` and `linux/arm64` are published automatically on every version tag. The test suite enforces a 65% statement-coverage floor and runs with the race detector.
 
-```
-go test -race ./...
+```bash
+git clone https://github.com/NdumLab/noso
+cd noso
+go test ./...
 ```
 
 ## License
