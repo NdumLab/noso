@@ -119,4 +119,4 @@ jobs:
             dist/cli-helper-linux-amd64
             dist/cli-helper-linux-arm64
             dist/SHA256SUMS
-          generate_release_notes: true
+          
