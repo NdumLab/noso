@@ -3,7 +3,7 @@ name: CI
 on:
   push:
     branches: ["main"]
-    tag["v*"]
+    tags: ["v*"]
   pull_request:
     branches: ["main"]
 jobs:
