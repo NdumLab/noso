@@ -53,7 +53,7 @@ Usage:
   cli-helper history [--limit N] [--match TEXT]
   cli-helper incident-status [--query TEXT]
   cli-helper incident-history [--limit N] [--query TEXT] [--match TEXT] [--status open|resolved]
-  cli-helper incident-ingest --query TEXT [--source TEXT] [--severity TEXT] [--summary TEXT] [--fingerprint TEXT] [--label key=value]
+  cli-helper incident-ingest [--input PATH|-] [--query TEXT] [--source TEXT] [--severity TEXT] [--summary TEXT] [--fingerprint TEXT] [--label key=value]
   cli-helper incident-observe --query TEXT [--max-steps N]
   cli-helper incident-resolve --query TEXT [--summary TEXT]
   cli-helper llm-log [--limit N] [--match TEXT] [--since RFC3339|DURATION] [--provider NAME] [--error-only] [--clarification-only] [--stats] [--format text|json|markdown|csv] [--output PATH]
@@ -75,6 +75,8 @@ Examples:
   cli-helper incident-status --query "why is worker 2 not up?"
   cli-helper incident-history --status open
   cli-helper incident-ingest --query "api availability alert" --source alertmanager --severity critical --summary "API error rate above threshold" --label service=api --label namespace=prod
+  cli-helper incident-ingest --input alert.json
+  cat alert.json | cli-helper incident-ingest --input -
   cli-helper incident-observe --query "why is worker 2 not up?"
   cli-helper incident-observe --query "why is worker 2 not up?" --max-steps 3
   cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Pod image pull secret fixed"
@@ -167,7 +169,7 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (in
 	case "incident-history":
 		return runIncidentHistory(rest[1:], stdout, stderr, jsonOut, cfg)
 	case "incident-ingest":
-		return runIncidentIngest(rest[1:], stdout, stderr, jsonOut, cfg)
+		return runIncidentIngest(rest[1:], stdin, stdout, stderr, jsonOut, cfg)
 	case "incident-observe":
 		return runIncidentObserve(rest[1:], stdout, stderr, jsonOut, quiet, cfg)
 	case "incident-resolve":
@@ -511,9 +513,10 @@ func (f *labelsFlag) Set(value string) error {
 	return nil
 }
 
-func runIncidentIngest(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
+func runIncidentIngest(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
 	fs := flag.NewFlagSet("incident-ingest", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	input := fs.String("input", "", "path to native alert JSON or Alertmanager-style payload, or - for stdin")
 	query := fs.String("query", "", "incident query or title to open/update")
 	source := fs.String("source", "", "alert source, such as alertmanager")
 	severity := fs.String("severity", "", "alert severity, such as critical or warning")
@@ -524,31 +527,60 @@ func runIncidentIngest(args []string, stdout io.Writer, stderr io.Writer, jsonOu
 	if err := fs.Parse(args); err != nil {
 		return ExitUsage, err
 	}
-	if strings.TrimSpace(*query) == "" && strings.TrimSpace(*summary) == "" {
-		return ExitUsage, fmt.Errorf("incident-ingest requires --query or --summary")
-	}
 	state, err := incident.LoadState(cfg.IncidentStatePath)
 	if err != nil {
 		return ExitErr, err
 	}
-	alert := incident.Alert{
-		Query:       strings.TrimSpace(*query),
-		Source:      strings.TrimSpace(*source),
-		Severity:    strings.TrimSpace(*severity),
-		Summary:     strings.TrimSpace(*summary),
-		Fingerprint: strings.TrimSpace(*fingerprint),
-		Labels:      map[string]string(labels),
+
+	var alerts []incident.Alert
+	if strings.TrimSpace(*input) != "" {
+		alerts, err = incident.LoadAlerts(*input, stdin)
+		if err != nil {
+			return ExitUsage, err
+		}
+	} else {
+		if strings.TrimSpace(*query) == "" && strings.TrimSpace(*summary) == "" {
+			return ExitUsage, fmt.Errorf("incident-ingest requires --query, --summary, or --input")
+		}
+		alerts = []incident.Alert{{
+			Query:       strings.TrimSpace(*query),
+			Source:      strings.TrimSpace(*source),
+			Severity:    strings.TrimSpace(*severity),
+			Summary:     strings.TrimSpace(*summary),
+			Fingerprint: strings.TrimSpace(*fingerprint),
+			Labels:      map[string]string(labels),
+		}}
 	}
-	state = incident.UpsertAlert(state, alert)
+	for _, alert := range alerts {
+		state = incident.UpsertAlert(state, alert)
+	}
 	if err := incident.SaveState(cfg.IncidentStatePath, state); err != nil {
 		return ExitErr, err
 	}
-	record, _ := incident.Find(state, firstCLIValue(alert.Query, alert.Summary))
-	rendered, renderErr := incident.RenderStatus(record, jsonOut)
-	if renderErr != nil {
-		return ExitErr, renderErr
+	if jsonOut && len(alerts) > 1 {
+		records := make([]incident.Record, 0, len(alerts))
+		for _, alert := range alerts {
+			record, _ := incident.Find(state, firstCLIValue(alert.Query, alert.Summary))
+			records = append(records, record)
+		}
+		rendered, renderErr := incident.RenderHistory(records, true)
+		if renderErr != nil {
+			return ExitErr, renderErr
+		}
+		fmt.Fprint(stdout, rendered)
+		return ExitOK, nil
 	}
-	fmt.Fprint(stdout, rendered)
+	for i, alert := range alerts {
+		record, _ := incident.Find(state, firstCLIValue(alert.Query, alert.Summary))
+		rendered, renderErr := incident.RenderStatus(record, jsonOut)
+		if renderErr != nil {
+			return ExitErr, renderErr
+		}
+		if i > 0 && !jsonOut {
+			fmt.Fprint(stdout, "\n")
+		}
+		fmt.Fprint(stdout, rendered)
+	}
 	return ExitOK, nil
 }
 

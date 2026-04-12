@@ -276,6 +276,8 @@ cli-helper troubleshoot-reset --query "why is worker 2 not up?"
 cli-helper incident-status --query "why is worker 2 not up?"
 cli-helper incident-history --status open
 cli-helper incident-ingest --query "api availability alert" --source alertmanager --severity critical --summary "API error rate above threshold" --label service=api --label namespace=prod
+cli-helper incident-ingest --input alert.json
+cat alert.json | cli-helper incident-ingest --input -
 cli-helper incident-observe --query "why is worker 2 not up?"
 cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deployment image pull secret fixed"
 ```
@@ -357,6 +359,17 @@ cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deploym
 ```
 
 `incident-ingest` opens or updates an incident from a structured external signal. It is a local ingest path for alert sources like Alertmanager, schedulers, or other automation that can call the CLI with a stable query or fingerprint plus metadata such as source, severity, summary, and labels.
+
+It now supports both flat flags and payload ingestion:
+
+```bash
+cli-helper incident-ingest --input alert.json
+cat alert.json | cli-helper incident-ingest --input -
+```
+
+Supported payloads:
+- native `noso` alert JSON using the `query`, `source`, `severity`, `summary`, `fingerprint`, and `labels` fields
+- an Alertmanager-style envelope with `alerts`, `commonLabels`, and `commonAnnotations`
 
 `incident-observe` is the first policy-controlled execution surface in `noso`. It only runs explicit, low-risk, read-only probes from the incident’s queued next steps, and it refuses mutation-oriented commands even if they appear in the incident guidance. Today that allowlist covers observation commands such as `systemctl status`, `journalctl -u`, `docker|podman ps`, `docker|podman logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp`.
 

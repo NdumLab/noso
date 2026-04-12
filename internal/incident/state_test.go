@@ -43,6 +43,48 @@ func TestUpdateFromTroubleshootCreatesIncident(t *testing.T) {
 	}
 }
 
+func TestParseAlertsNativeSingle(t *testing.T) {
+	alerts, err := ParseAlerts([]byte(`{"query":"api availability alert","source":"alertmanager","severity":"critical","summary":"API error rate above threshold","labels":{"service":"api"}}`))
+	if err != nil {
+		t.Fatalf("ParseAlerts() error = %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("len(alerts) = %d, want 1", len(alerts))
+	}
+	if alerts[0].Labels["service"] != "api" {
+		t.Fatalf("Labels = %#v", alerts[0].Labels)
+	}
+}
+
+func TestParseAlertsAlertmanagerPayload(t *testing.T) {
+	alerts, err := ParseAlerts([]byte(`{
+  "commonLabels":{"namespace":"prod"},
+  "alerts":[
+    {
+      "status":"firing",
+      "labels":{"alertname":"APIAvailability","severity":"critical","service":"api"},
+      "annotations":{"summary":"API error rate above threshold"},
+      "fingerprint":"abc123"
+    }
+  ]
+}`))
+	if err != nil {
+		t.Fatalf("ParseAlerts() error = %v", err)
+	}
+	if len(alerts) != 1 {
+		t.Fatalf("len(alerts) = %d, want 1", len(alerts))
+	}
+	if alerts[0].Source != "alertmanager" {
+		t.Fatalf("Source = %q", alerts[0].Source)
+	}
+	if alerts[0].Fingerprint != "abc123" {
+		t.Fatalf("Fingerprint = %q", alerts[0].Fingerprint)
+	}
+	if alerts[0].Labels["namespace"] != "prod" {
+		t.Fatalf("Labels = %#v", alerts[0].Labels)
+	}
+}
+
 func TestResolveIncident(t *testing.T) {
 	state := State{Incidents: []Record{{
 		ID:     "why is worker 2 not up?",

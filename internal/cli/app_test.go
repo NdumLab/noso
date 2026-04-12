@@ -185,6 +185,38 @@ func TestRunIncidentIngest(t *testing.T) {
 	}
 }
 
+func TestRunIncidentIngestFromInputFile(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	inputPath := filepath.Join(t.TempDir(), "alert.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	if err := os.WriteFile(inputPath, []byte(`{
+  "alerts":[
+    {
+      "status":"firing",
+      "labels":{"alertname":"APIAvailability","severity":"critical","service":"api"},
+      "annotations":{"summary":"API error rate above threshold"},
+      "fingerprint":"abc123"
+    }
+  ],
+  "commonLabels":{"namespace":"prod"}
+}`), 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"incident-ingest", "--input", inputPath}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("Run() code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "Source: alertmanager") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "namespace=prod") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
 func TestRunIncidentObserveMaxSteps(t *testing.T) {
 	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
 	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")

@@ -680,6 +680,16 @@
 - `go build ./cmd/cli-helper`: OK
 - `./cmd/cli-helper --help`: OK and shows `incident-ingest`
 
+## [2026-04-12 20:08] File and stdin payload ingestion for alerts
+- Extended `incident-ingest` with `--input PATH|-` so alerts can be provided from files or stdin instead of only shell flags
+- Added native `noso` alert JSON parsing and Alertmanager-style payload parsing with `alerts`, `commonLabels`, and `commonAnnotations`
+- Kept both payload formats mapped into the same incident model so incident status/history/observe flows work identically regardless of how the alert entered the system
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+- `go build ./cmd/cli-helper`: OK
+- `./cmd/cli-helper --help`: OK and shows payload-based ingest examples
+
 ## [2026-04-12 17:18] Make Kubernetes log probes container-aware
 - Updated the live Kubernetes evidence loop to carry the discovered `container_hint` into both `kubectl logs` execution and rendered `kubectl logs` follow-up steps
 - Added a shared Kubernetes log command builder so namespaced and multi-container log probes stay consistent across describe and get-pods evidence flows
