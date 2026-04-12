@@ -275,6 +275,70 @@ cli-helper troubleshoot-history --query "why is worker 2 not up?"
 cli-helper troubleshoot-reset --query "why is worker 2 not up?"
 ```
 
+Troubleshoot threads now also persist likely root-cause scores inferred from live findings. That lets repeated runs converge toward explanations such as a missing systemd unit, a crashing container, a permission failure, a database dependency problem, or a Kubernetes CrashLoopBackOff instead of only moving through probe families.
+
+Those ranked causes also shape the follow-up guidance. When one cause becomes dominant, `troubleshoot` now appends targeted next checks for that cause instead of only restating generic branch probes.
+
+Later evidence can also retire stale causes. For example, if one run looks like a generic service startup failure but the next probe proves the unit does not exist, the service-failure cause is down-ranked out of the thread and the missing-unit explanation takes over.
+
+Explicit operator clarifications now reweight the active troubleshoot thread immediately. If the next message is something like `it's actually a pod`, `it's actually a container`, or `it's actually a service`, `troubleshoot` reuses the latest thread, pivots the branch selection to the clarified object family, and retires incompatible causes instead of treating that clarification as a brand-new outage.
+
+Before deeper probing, the planner now also tries to discover whether the inferred target already exists as a systemd unit, a container name, or a Kubernetes pod. Those existence signals are used to bias the first branch, so `troubleshoot` prefers discovered objects over purely linguistic guesses whenever the local tools can confirm them safely.
+
+That discovery signal is now rendered directly in the CLI output under a `Discovery` section, for example when `troubleshoot` finds no matching systemd unit or does find a matching pod name before it runs the first deeper probe.
+
+Those discovery negatives are also persisted in the troubleshoot thread. If the first run shows `No matching systemd unit name found`, the next run will skip back toward runtime or Kubernetes probes sooner instead of re-centering on the already disproven service branch.
+
+When there is no exact local match, the same discovery section now also shows a few nearby object names such as `worker@2`, `worker-2`, or `worker2-api` when those are present locally. That gives the operator immediate candidate names to check before continuing with a wrong target.
+
+Those nearby names now also turn into explicit follow-up suggestions. If `troubleshoot` sees a close pod, container, or unit name, it adds a direct corrected-target command suggestion like `kubectl describe pod worker-2` or `systemctl status worker@2 --no-pager -l` so the operator can pivot immediately.
+
+If the next troubleshoot query uses one of those discovered nearby names, the active thread now adopts that corrected target directly instead of continuing to plan around the older inferred name. That keeps follow-up probes grounded on the closest real object the host or cluster actually exposed.
+
+When that happens, the CLI now prints an explicit `Adopted target:` line so the operator can see that the active thread pivoted to a discovered nearby object instead of silently inferring it from the command alone.
+
+That adoption is now treated as a real target correction, not just a display hint. Once the thread pivots, stale discovery, findings, and incompatible cause follow-ups from the older inferred target are retired so the next reasoning cycle is centered on the adopted object.
+
+The active thread can now also absorb lightweight context refinements without starting over. Follow-ups like `worker-2 in namespace prod` or `it is podman` update the current target context so the next planned probe uses the corrected namespace or runtime identity instead of re-deriving everything from the original wording.
+
+Those refinements are now checked against live inventory too. When `kubectl` is available, `troubleshoot` can confirm whether the matching pod name actually exists in the requested namespace or only in other namespaces. When a runtime hint like `podman` or `docker` is present, the discovery output now confirms whether that runtime is actually available on the host before it biases the next probe.
+
+The live evidence loop now keeps that namespace context too. Once a namespaced pod is confirmed, the evidence follow-ups generated from `kubectl describe pod`, `kubectl logs`, and `kubectl get events` stay scoped to that namespace instead of falling back to cluster-wide or placeholder commands.
+
+The evidence loop also now correlates some dependency failures across object boundaries. If pod logs, container logs, or journal output point to database connectivity or DNS resolution failures, `troubleshoot` adds the next read-only infrastructure probes automatically, such as `dig +short` or `nslookup` for the dependency hostname and listener validation guidance for the expected upstream port.
+
+When the logs include the concrete upstream hostname, those follow-ups now use it directly. For example, a log line mentioning `db.internal` or `api.internal` will now produce `dig +short db.internal` rather than a generic placeholder probe.
+
+When the logs also include an explicit upstream port, `troubleshoot` now carries that forward too. A message like `db.internal port 5432` now produces a concrete socket probe such as `nc -vz db.internal 5432` instead of only generic listener guidance.
+
+Those infrastructure probes are now also specialized to the current host. If `dig` is missing but `nslookup` exists, `troubleshoot` rewrites the DNS probe accordingly. If `nc` is unavailable but the shell is `bash`, it falls back to a `</dev/tcp/...>` reachability check instead of keeping a probe the host cannot run.
+
+For active Kubernetes threads, that specialization now also distinguishes node-local and in-cluster checks. Dependency probes derived from pod-local evidence are rewritten into `kubectl exec` follow-ups against the current pod context instead of assuming the check belongs on the node.
+
+When pod describe output reveals a specific failing container name, those in-cluster probes now include `-c <container>` as well. That now covers both `kubectl exec` dependency checks and `kubectl logs` follow-ups, which matters for multi-container pods where the evidence loop needs to stay in the same container context that emitted the original failure.
+
+That container hint no longer depends only on the `Containers:` section of `kubectl describe pod`. The interpreter now also extracts container names from Kubernetes event text and pod-log preambles such as `Defaulted container "api" out of: ...`, so the troubleshoot thread can stay container-aware even when the first useful signal comes from events or logs.
+
+`kubectl get events` is now interpreted directly too. When recent event rows identify a failing pod and container, the live troubleshoot path can move straight from the event stream into `kubectl logs -c <container> --previous` instead of dropping back to a generic pod-only follow-up.
+
+That event interpretation is now reason-aware as well. Restart/backoff events still lead to previous-container logs, but image-pull, scheduling, and mount failures now branch into more appropriate follow-ups such as workload image/imagePullSecrets review, scheduler-capacity checks, and PVC or mount inspection instead of pretending container logs are always the next best probe.
+
+Image-pull event handling is now concrete when the event stream includes the actual image reference. If the row mentions something like `ghcr.io/...` or `registry.internal:5000/...`, `noso` now extracts that registry endpoint and adds exact DNS and socket probes for the registry host instead of leaving connectivity checks generic.
+
+Scheduler event handling is now more specific too. `FailedScheduling` rows are no longer treated as a generic capacity problem: `noso` now distinguishes memory pressure, CPU pressure, taint or toleration mismatches, node-affinity mismatches, and unbound PVC scheduling blockers, and tailors the next checks accordingly.
+
+Mount and storage failures are now more concrete as well. When `FailedMount` or related event text names a missing PVC, secret, or config map, `noso` now carries that exact object name into the next step instead of only saying “inspect storage.”
+
+Those storage follow-ups are now rendered as concrete read-only commands too. For example, a missing PVC, Secret, or ConfigMap in the event stream now becomes a specific `kubectl describe pvc|secret|configmap -n <namespace> <name>` step rather than a prose-only hint.
+
+When scheduler messages include a concrete node name, `noso` now uses that too. Instead of only saying “check capacity” or “review taints,” it adds an exact `kubectl describe node <name>` follow-up so the operator can inspect allocatable resources, labels, taints, and conditions on the named candidate node.
+
+Those Kubernetes infrastructure objects are now stateful troubleshoot targets too. If an earlier run surfaced a PVC, Secret, ConfigMap, or node as the next concrete object to inspect, a follow-up query that names that object can now pivot the active troubleshoot thread directly to the matching `kubectl describe ...` command instead of re-running the generic outage classifier.
+
+That continuity now extends through refinement as well. Once the active thread is already on a PVC, Secret, ConfigMap, or node, follow-up queries keep that object type and namespace instead of collapsing back into a pod-first outage guess.
+
+The same owner-object promotion now also covers higher-level Kubernetes workload objects discovered in event text. When the event stream points at a Deployment or Service, `troubleshoot` now surfaces exact `kubectl describe deployment ...` or `kubectl describe service ...` follow-ups, and repeated queries can adopt those objects into the active thread just like pods, PVCs, and nodes.
+
 You can also run `noso-llm` against a real local model runtime through Ollama while keeping the same JSON contract:
 
 ```bash

@@ -2,6 +2,7 @@ package troubleshoot
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/NdumLab/noso/pkg/models"
@@ -31,6 +32,12 @@ func TestStateRoundTrip(t *testing.T) {
 	}
 	if thread.FamilyScores["service"] >= 0 {
 		t.Fatalf("FamilyScores = %#v, expected service family to be down-ranked", thread.FamilyScores)
+	}
+	if thread.CauseScores["service_unit_missing"] <= 0 {
+		t.Fatalf("CauseScores = %#v, expected missing-unit cause to be up-ranked", thread.CauseScores)
+	}
+	if len(thread.LastDiscovery) != 0 {
+		t.Fatalf("LastDiscovery = %#v, want none", thread.LastDiscovery)
 	}
 	if len(thread.History) != 1 {
 		t.Fatalf("History len = %d, want 1", len(thread.History))
@@ -77,14 +84,18 @@ func TestApplyThreadContextPrefersRuntimeAfterMissingService(t *testing.T) {
 		},
 	}
 	thread := StateThread{
-		Query:        "why is worker 2 not up?",
-		Executed:     []string{"systemctl status worker2 --no-pager -l"},
-		LastFindings: []string{"Live service evidence: The requested unit could not be found on this host."},
-		FamilyScores: map[string]float64{"service": -2.0, "runtime": 1.0, "kubernetes": 0.7},
+		Query:         "why is worker 2 not up?",
+		Executed:      []string{"systemctl status worker2 --no-pager -l"},
+		LastDiscovery: []string{"No matching systemd unit name found for worker2."},
+		LastFindings:  []string{"Live service evidence: The requested unit could not be found on this host."},
+		FamilyScores:  map[string]float64{"service": -2.0, "runtime": 1.0, "kubernetes": 0.7},
 	}
 	updated := ApplyThreadContext(response, thread)
 	if updated.Command != "podman ps -a" {
 		t.Fatalf("Command = %q", updated.Command)
+	}
+	if !containsString(updated.Discovery, "Previous discovery: No matching systemd unit name found for worker2.") {
+		t.Fatalf("Discovery = %#v", updated.Discovery)
 	}
 }
 
@@ -101,12 +112,18 @@ func TestUpdateStateAccumulatesRuntimeConfidence(t *testing.T) {
 	if thread.FamilyScores["runtime"] <= 0 {
 		t.Fatalf("FamilyScores = %#v, expected runtime family to be up-ranked", thread.FamilyScores)
 	}
+	if thread.CauseScores["runtime_container_failure"] <= 0 {
+		t.Fatalf("CauseScores = %#v, expected runtime cause to be up-ranked", thread.CauseScores)
+	}
 }
 
 func TestUpdateStatePrependsHistory(t *testing.T) {
 	state := UpdateState(State{}, "why is worker 2 not up?", models.Response{
 		IntentID: "troubleshoot_plan",
 		Command:  "systemctl status worker2 --no-pager -l",
+		Discovery: []string{
+			"No matching systemd unit name found for worker2.",
+		},
 		Findings: []string{"Live service evidence: unit not found"},
 	})
 	state = UpdateState(state, "why is worker 2 not up?", models.Response{
@@ -127,6 +144,9 @@ func TestUpdateStatePrependsHistory(t *testing.T) {
 	if thread.History[1].Command != "systemctl status worker2 --no-pager -l" {
 		t.Fatalf("History[1].Command = %q", thread.History[1].Command)
 	}
+	if !containsString(thread.LastDiscovery, "No matching systemd unit name found for worker2.") {
+		t.Fatalf("LastDiscovery = %#v", thread.LastDiscovery)
+	}
 }
 
 func TestResetStateByQuery(t *testing.T) {
@@ -145,4 +165,95 @@ func TestResetStateByQuery(t *testing.T) {
 	if _, ok := FindThread(state, "why is api not up?"); !ok {
 		t.Fatal("expected api thread to remain")
 	}
+}
+
+func TestAttachLikelyCausesRanksCauses(t *testing.T) {
+	thread := StateThread{
+		CauseScores: map[string]float64{
+			"dependency_database_connectivity": 2.1,
+			"permission_or_access_denied":      1.8,
+			"runtime_container_failure":        0.9,
+		},
+	}
+	response := AttachLikelyCauses(models.Response{}, thread)
+	if len(response.LikelyCauses) != 3 {
+		t.Fatalf("LikelyCauses len = %d, want 3", len(response.LikelyCauses))
+	}
+	if response.LikelyCauses[0] != "High confidence: the workload is failing because it cannot reach its database dependency" {
+		t.Fatalf("LikelyCauses[0] = %q", response.LikelyCauses[0])
+	}
+	if response.LikelyCauses[1] != "Medium confidence: the workload is failing because of a permission or access-denied error" {
+		t.Fatalf("LikelyCauses[1] = %q", response.LikelyCauses[1])
+	}
+	if len(response.NextSteps) == 0 {
+		t.Fatal("expected cause-aware follow-up guidance")
+	}
+	if response.NextSteps[0] != "Evidence follow-up: Cause follow-up: Verify the database endpoint, credentials source, DNS resolution, and network reachability from the workload host or container." {
+		t.Fatalf("NextSteps[0] = %q", response.NextSteps[0])
+	}
+}
+
+func TestUpdateStateDownranksDisprovenServiceCause(t *testing.T) {
+	state := UpdateState(State{}, "why is worker 2 not up?", models.Response{
+		IntentID: "troubleshoot_plan",
+		Command:  "systemctl status worker2 --no-pager -l",
+		Findings: []string{"Live service evidence: The unit is in a failed state. systemd recorded a service failure rather than a healthy running process."},
+	})
+	state = UpdateState(state, "why is worker 2 not up?", models.Response{
+		IntentID: "troubleshoot_plan",
+		Command:  "systemctl status worker2 --no-pager -l",
+		Findings: []string{"Live service evidence: The requested unit could not be found on this host. That usually means the service name is wrong, the unit file is absent, or the workload is not managed by systemd."},
+	})
+	thread, ok := FindThread(state, "why is worker 2 not up?")
+	if !ok {
+		t.Fatal("FindThread() = false, want true")
+	}
+	if thread.CauseScores["service_unit_missing"] <= 0 {
+		t.Fatalf("CauseScores = %#v, expected missing-unit cause to remain", thread.CauseScores)
+	}
+	if thread.CauseScores["service_process_failure"] != 0 {
+		t.Fatalf("CauseScores = %#v, expected service failure cause to be retired", thread.CauseScores)
+	}
+}
+
+func TestAttachLikelyCausesOmitsRetiredKubernetesCause(t *testing.T) {
+	thread := StateThread{
+		CauseScores: map[string]float64{
+			"kubernetes_crashloop":           2.2,
+			"kubernetes_image_pull":          0.4,
+			"kubernetes_scheduling_capacity": 0,
+		},
+	}
+	adjustCauseScore(thread.CauseScores, "kubernetes_crashloop", -3.0)
+	response := AttachLikelyCauses(models.Response{}, thread)
+	for _, cause := range response.LikelyCauses {
+		if strings.Contains(strings.ToLower(cause), "crashing repeatedly") {
+			t.Fatalf("LikelyCauses = %#v, expected retired cause to be omitted", response.LikelyCauses)
+		}
+	}
+}
+
+func TestPreviewThreadIgnoresPreviousFindingPrefixesForCauseScoring(t *testing.T) {
+	existing := StateThread{
+		Query:       "why is worker 2 not up?",
+		CauseScores: map[string]float64{"service_unit_missing": 0},
+	}
+	response := models.Response{
+		IntentID:    "troubleshoot_plan",
+		Explanation: "Built a ranked, read-only troubleshoot plan.",
+		Findings:    []string{"Previous finding: Live service evidence: The requested unit could not be found on this host."},
+	}
+	thread := PreviewThread(existing, existing.Query, response)
+	if thread.CauseScores["service_unit_missing"] != 0 {
+		t.Fatalf("CauseScores = %#v, expected previous finding prefix to be ignored", thread.CauseScores)
+	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

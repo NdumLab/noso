@@ -13,7 +13,10 @@ func TestRenderResponseText(t *testing.T) {
 		IntentID:       "inspect_port_listener",
 		Command:        "ss -ltnp | grep :8080",
 		Explanation:    "Inspect listeners on TCP port 8080.",
+		AdoptedTarget:  "worker-2 (kubernetes)",
+		Discovery:      []string{"Found matching systemd unit nginx."},
 		Findings:       []string{"Port 8080 is currently bound by nginx."},
+		LikelyCauses:   []string{"Medium confidence: nginx is already bound to the port"},
 		ExpectedOutput: "A matching process and PID if the port is in use.",
 		Risk:           "Low",
 		Confidence:     "High",
@@ -25,7 +28,7 @@ func TestRenderResponseText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderResponse() error = %v", err)
 	}
-	for _, token := range []string{"Command:", "Findings:", "Risk: Low", "Confidence: High", "Next step:"} {
+	for _, token := range []string{"Command:", "Adopted target:", "Discovery:", "Findings:", "Likely Causes:", "Risk: Low", "Confidence: High", "Next step:"} {
 		if !strings.Contains(rendered, token) {
 			t.Fatalf("rendered output missing %q", token)
 		}

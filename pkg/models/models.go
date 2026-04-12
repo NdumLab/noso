@@ -27,7 +27,11 @@ type Response struct {
 	ExpectedOutput string   `json:"expected_output"`
 	Risk           string   `json:"risk"`
 	Confidence     string   `json:"confidence"`
+	AdoptedTarget  string   `json:"adopted_target,omitempty"`
+	ContainerHint  string   `json:"container_hint,omitempty"`
+	Discovery      []string `json:"discovery,omitempty"`
 	Findings       []string `json:"findings,omitempty"`
+	LikelyCauses   []string `json:"likely_causes,omitempty"`
 	VerifiedFrom   []string `json:"verified_from,omitempty"`
 	NextSteps      []string `json:"next_steps,omitempty"`
 	Warnings       []string `json:"warnings,omitempty"`

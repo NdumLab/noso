@@ -627,6 +627,268 @@
 - `staticcheck ./...`: OK
 - `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats`: OK
 
+## [2026-04-12 18:12] Kubernetes owner-object adoption and CI hardening
+- Completed the in-flight event-owner path so `kubectl get events` owner references for Deployments and Services now become structured troubleshoot suggestions, direct inspection responses, and stateful adopted targets across follow-up queries
+- Extended troubleshoot adoption, refinement, active-thread context, and direct-response handling to cover `kubernetes-deployment` and `kubernetes-service` families alongside existing pod, PVC, Secret, ConfigMap, and node flows
+- Updated README to document owner-object promotion and tightened the GitHub Actions workflow with explicit `contents: write` permissions while disabling ineffective Go cache lookups for this dependency-light module
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/interpret ./internal/cli ./internal/registry`: OK
+- `go build ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper --help`: OK
+
+## [2026-04-12 17:18] Make Kubernetes log probes container-aware
+- Updated the live Kubernetes evidence loop to carry the discovered `container_hint` into both `kubectl logs` execution and rendered `kubectl logs` follow-up steps
+- Added a shared Kubernetes log command builder so namespaced and multi-container log probes stay consistent across describe and get-pods evidence flows
+- Extended Kubernetes evidence tests to assert `-c <container>` on live log probes and `--previous` follow-ups when the failing container name is known
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper --help`: OK
+- `NOSO_TROUBLESHOOT_STATE_PATH=/tmp/noso-troubleshoot-state.json ./bin/cli-helper troubleshoot "pod worker-2 crashloopbackoff"`: OK and reports missing `kubectl` cleanly when unavailable
+
+## [2026-04-12 17:27] Extract Kubernetes container hints from events and logs
+- Added structured container-hint extraction in `internal/interpret/output.go` for Kubernetes event text and pod-log preambles, including `failed container api` and `Defaulted container "api" out of: ...`
+- Updated the Kubernetes evidence loop to trust interpreter-supplied `container_hint` before falling back to the `Containers:` section parser
+- Added tests covering event-derived and log-derived container hints plus an evidence flow that uses an event-derived container name for the live `kubectl logs -c <container>` probe
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper interpret --command "kubectl logs -n prod web-7c5c --tail=100" --input 'Defaulted container "api" out of: api, sidecar ...'`: OK
+
+## [2026-04-12 17:36] Add Kubernetes event interpretation and event-driven log probes
+- Added a dedicated `kubectl get events` interpreter that extracts failure signals, affected pod names, namespace context, and `container_hint` values from event rows
+- Extended the troubleshoot evidence loop to interpret live Kubernetes event output and automatically follow it with `kubectl logs -c <container> --previous` when restart/backoff events identify a pod and failing container
+- Added tests covering event interpretation and an event-driven evidence flow that reaches a concrete container-scoped previous-log probe
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper interpret --command "kubectl get events -n prod --sort-by=.metadata.creationTimestamp" --input '...failed container api...' --json`: OK and returns `container_hint=api` plus `kubectl logs -c api --previous`
+
+## [2026-04-12 17:44] Branch Kubernetes event guidance by failure family
+- Updated `interpret_kubectl_get_events` to branch its next steps by event family instead of always preferring previous-container logs
+- Restart and backoff events still lead to `kubectl logs --previous`, while image-pull, scheduling, and mount failures now emit registry/auth, capacity, and storage-oriented follow-ups
+- Added tests covering image-pull and scheduling event interpretation plus an evidence-flow case that confirms image-pull events do not trigger a misleading live log probe
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 17:52] Extract registry endpoints from image-pull events
+- Extended Kubernetes event interpretation to recognize `Failed to pull image ...` rows in addition to `ImagePullBackOff` and `ErrImagePull`
+- Added registry endpoint extraction from image references like `ghcr.io/example/app:tag` and `registry.internal:5000/team/app:tag`
+- Image-pull guidance now includes concrete registry DNS and socket probes such as `dig +short ghcr.io` and `nc -vz registry.internal 5000`
+- Added tests covering both host-only and host-plus-port registry extraction plus the troubleshoot evidence flow for image-pull events
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 17:59] Extract concrete scheduler blockers from event text
+- Added scheduler-specific branching for `FailedScheduling` event text so the guidance now distinguishes memory pressure, CPU pressure, taint or toleration mismatches, node-affinity mismatches, and unbound PVC blockers
+- Replaced the generic scheduler follow-up with reason-specific checks such as node allocatable memory, tolerations, node labels and affinity, or PVC binding inspection depending on the event content
+- Added tests covering memory, taint, and node-affinity scheduling failures
+
+### Validation results
+- `go test ./internal/interpret`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 18:05] Extract concrete storage object names from mount failures
+- Added mount-failure parsing for event text so `FailedMount` and related rows can extract missing PVC, Secret, or ConfigMap names
+- Replaced the generic storage follow-up with object-specific checks such as `Inspect PVC web-data` or `Inspect Secret web-tls` when the event text names the missing object directly
+- Added tests covering PVC-backed and Secret-backed mount failures
+
+### Validation results
+- `go test ./internal/interpret`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 18:12] Emit concrete kubectl describe commands for storage blockers
+- Converted mount-failure storage guidance from prose into exact read-only `kubectl describe pvc|secret|configmap` commands, preserving namespace context when known
+- Added ConfigMap coverage alongside PVC and Secret cases so event-derived storage blockers consistently produce actionable inspection commands
+
+### Validation results
+- `go test ./internal/interpret`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 18:18] Add concrete node inspection for named scheduler failures
+- Extended scheduler-event interpretation to extract node names from event text when a taint, affinity, or related scheduling failure names a specific node
+- Added exact `kubectl describe node <name>` follow-ups so node-scoped scheduler issues become actionable without manual node-name extraction
+- Added test coverage for named-node scheduling failures
+
+### Validation results
+- `go test ./internal/interpret`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 18:26] Promote Kubernetes infrastructure objects into troubleshoot state
+- Extended suggested-target parsing and adoption to support event-derived Kubernetes infrastructure objects: PVCs, Secrets, ConfigMaps, and nodes
+- Added direct suggested-target responses for those objects so repeated troubleshoot queries can pivot straight to `kubectl describe pvc|secret|configmap|node ...` instead of forcing those names back through the generic outage planner
+- Added coverage for parsing PVC suggestions and for CLI-level stateful adoption of a discovered PVC target
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 18:34] Preserve infrastructure object family through follow-up refinement
+- Extended thread refinement and command-context tracking so adopted Kubernetes infrastructure objects keep their object type and namespace across follow-up queries
+- Added direct-response reuse for active PVC, Secret, ConfigMap, and node threads so refinements do not fall back into the generic outage planner
+- Added coverage for PVC refinement plus the underlying query-building and command-context paths
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: pending
+- `go test ./...`: pending
+- `go vet ./...`: pending
+- `staticcheck ./...`: pending
+- `bash scripts/build.sh`: pending
+
+## [2026-04-12 15:39] Adopt discovered corrected targets in troubleshoot threads
+- Added persisted `suggested_targets` parsing and storage in `internal/troubleshoot/state.go` so discovery follow-up commands become structured service, runtime, and Kubernetes target candidates
+- Added `internal/troubleshoot/adopt.go` and CLI integration so a follow-up query that uses a discovered nearby name, such as `worker-2`, adopts that corrected target into the active troubleshoot thread instead of continuing to plan around the older inferred name
+- Adjusted adopted planning queries so the corrected target becomes the primary extracted object for later branch selection, and documented the behavior in `README.md`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+
+## [2026-04-12 15:46] Render corrected-target adoption explicitly
+- Added `adopted_target` to `pkg/models.Response` and rendered it in `internal/output/render.go` so troubleshoot output shows when a discovered nearby object name has been adopted into the active thread
+- Updated the troubleshoot CLI path to populate that field when a stored suggested target is reused
+- Extended output and CLI tests to assert the new `Adopted target:` line and updated `README.md`
+
+### Validation results
+- `go test ./internal/output ./internal/cli`: OK
+
+## [2026-04-12 15:52] Retire stale reasoning after target adoption
+- Updated `ApplySuggestedTarget` in `internal/troubleshoot/adopt.go` so adopting a discovered nearby target clears stale executed-probe state, old discovery/findings carry-forward, and incompatible cause scores from the previous inferred target
+- Extended troubleshoot and CLI tests to assert that adopted responses no longer keep the older target's `Previous discovery` lines or service-specific cause follow-ups after pivoting to a discovered pod or container name
+- Documented the stronger target-correction behavior in `README.md`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+
+## [2026-04-12 16:00] Refine active troubleshoot context with namespace and runtime hints
+- Added persisted active target context in `internal/troubleshoot/state.go` so troubleshoot threads can carry the current target family, target name, namespace, and runtime hint forward across follow-up queries
+- Added `internal/troubleshoot/refine.go` and CLI integration so follow-ups like `worker-2 in namespace prod` and `it is podman` refine the active thread instead of starting a fresh ambiguous troubleshoot pass
+- Updated Kubernetes hypothesis generation in `internal/registry/troubleshoot_plan.go` so namespace refinements survive into the actual `kubectl describe pod -n <namespace> <name>` and `kubectl logs -n <namespace> <name>` commands
+- Documented the new refinement behavior in `README.md`
+
+### Validation results
+- `go test ./internal/registry ./internal/cli ./internal/troubleshoot`: OK
+
+## [2026-04-12 16:10] Ground namespace and runtime refinements in live discovery
+- Extended query-aware target discovery in `internal/registry/troubleshoot_plan.go` so namespace hints are checked against `kubectl get pods -A` inventory and runtime hints confirm whether the requested runtime is actually available on the host
+- Updated discovery rendering and follow-up suggestions to show namespace-specific pod matches, alternate namespaces for exact-name pod hits, and runtime availability confirmation before biasing later probes
+- Added registry tests for namespace-aware pod matching, namespace-specific discovery text, and runtime-specific follow-up commands, and documented the behavior in `README.md`
+
+### Validation results
+- `go test ./internal/registry`: OK
+
+## [2026-04-12 16:18] Keep live Kubernetes evidence namespace-scoped
+- Updated `internal/troubleshoot/evidence.go` so interpreted Kubernetes follow-up steps are rewritten with the concrete pod name and confirmed namespace, including `kubectl describe pod`, `kubectl logs`, and namespace-scoped `kubectl get events`
+- Fixed `internal/interpret/output.go` parsing for `kubectl get pods -A` tables so namespaced pod rows are interpreted against the actual pod name and status columns instead of the namespace column
+- Added and updated troubleshoot evidence tests to assert namespaced describe, logs, and events follow-ups and documented the behavior in `README.md`
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+
+## [2026-04-12 16:27] Correlate dependency failures from logs into infrastructure probes
+- Extended `internal/interpret/output.go` so generic log interpretation detects database-connectivity and DNS-resolution failures from journal, container, and pod log text
+- Added targeted infrastructure follow-up guidance for those signals, including DNS lookups and listener validation probes, so the troubleshoot evidence loop can move beyond pod-local inspection automatically
+- Added interpret and troubleshoot evidence tests covering database-related pod logs and DNS-resolution log output, and documented the new cross-object correlation behavior in `README.md`
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+
+## [2026-04-12 16:34] Extract concrete dependency hosts from logs
+- Added dependency-host extraction in `internal/interpret/output.go` so database and DNS follow-up probes use the actual upstream hostname from log text when present instead of falling back to placeholders
+- Hardened extraction to reject filler tokens like `to`, `database`, and `server`, and updated interpret and troubleshoot evidence tests to assert exact hostnames such as `db.internal` and `api.internal`
+- Documented the concrete-host probe behavior in `README.md`
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+
+## [2026-04-12 16:41] Extract concrete dependency ports from logs
+- Added dependency-port extraction in `internal/interpret/output.go` so database connectivity errors that include an explicit port now produce exact socket probes like `nc -vz db.internal 5432`
+- Kept the older generic listener guidance as the fallback only when no concrete port can be extracted from the log text
+- Updated interpret and troubleshoot evidence tests to assert exact host-and-port follow-up probes and documented the behavior in `README.md`
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot`: OK
+
+## [2026-04-12 16:48] Specialize infrastructure probes to host tooling
+- Added `internal/troubleshoot/specialize.go` and CLI integration so generated DNS and socket follow-up probes are rewritten to the best available local tool after live evidence has been attached
+- DNS follow-ups now prefer `dig`, fall back to `nslookup` when `dig` is unavailable, and socket probes fall back from `nc -vz` to a `bash` `/dev/tcp` probe when `nc` is missing
+- Added troubleshoot specialization tests and documented the environment-aware probe behavior in `README.md`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+
+## [2026-04-12 16:55] Distinguish in-cluster dependency probes from node-local ones
+- Extended `internal/troubleshoot/specialize.go` so infrastructure probes derived from active Kubernetes threads are rewritten into `kubectl exec` follow-ups against the current pod and namespace instead of remaining node-local commands
+- Updated CLI integration to pass active troubleshoot-thread context into the specialization layer and added tests covering in-cluster DNS and socket probes
+- Documented the node-local versus in-cluster probe distinction in `README.md`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+
+## [2026-04-12 17:02] Add container-aware in-cluster dependency probes
+- Added `container_hint` to response/state flow so Kubernetes evidence can persist a concrete failing container name inferred from pod describe output
+- Updated `internal/troubleshoot/evidence.go` to extract the primary container name from `kubectl describe pod` output and `internal/troubleshoot/specialize.go` to include `-c <container>` in `kubectl exec` dependency probes when that hint is available
+- Added troubleshoot tests covering container-hint extraction and container-aware `kubectl exec -c` follow-ups, and documented the behavior in `README.md`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+
 ## [2026-04-11 22:43] Added troubleshoot probe history and reset controls
 - Extended troubleshoot thread persistence with structured probe records carrying timestamps, commands, summaries, findings, and warnings for each run
 - Added `cli-helper troubleshoot-history` to inspect persisted troubleshoot probe history and `cli-helper troubleshoot-reset` to clear either one query thread or all troubleshoot state
@@ -641,6 +903,128 @@
 - `bash scripts/build.sh`: OK
 - `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot-history --query "why is worker 2 not up?"`: OK after a seeded troubleshoot run
 - `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot-reset --query "why is worker 2 not up?"`: OK and subsequent history view returned no matches
+
+## [2026-04-12 15:06] Added ranked likely-cause convergence to troubleshoot threads
+- Extended troubleshoot responses with a `likely_causes` field and terminal rendering so operators can see ranked probable root causes alongside live findings
+- Persisted per-thread `cause_scores` and updated troubleshoot state preview logic so repeated runs strengthen likely causes such as missing systemd units, service startup failure, permission denial, database dependency failure, unhealthy containers, and Kubernetes crash or image-pull problems
+- Updated README.md to document that troubleshoot threads now converge on likely causes over time instead of only advancing across probe families
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/output ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and rendered a `Likely Causes` section in the rebuilt binary output
+
+## [2026-04-12 15:07] Added cause-aware troubleshoot follow-up guidance
+- Updated likely-cause attachment so the highest-ranked persisted causes now add targeted follow-up guidance, not just a ranked summary section
+- Added cause-specific next steps for missing systemd units, service startup failure, permission denial, database dependency failure, unhealthy containers, and Kubernetes crash, image-pull, or scheduling blockers
+- Updated README.md to note that dominant likely causes now shape the follow-up guidance shown by `troubleshoot`
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/output ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot "why is worker 2 not up?" | rg "Likely Causes|Cause follow-up"`: OK
+
+## [2026-04-12 15:09] Added cause retirement for contradicted troubleshoot evidence
+- Updated cause scoring so later evidence can subtract from disproven causes instead of only accumulating more hypotheses
+- Added contradiction rules for service unit missing versus service startup failure, healthy service output, runtime ambiguity, and mutually exclusive Kubernetes crashloop, image-pull, or scheduling blockers
+- Updated README.md to document that later probes can retire stale causes from the troubleshoot thread
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- repeated troubleshoot state tests confirmed contradicted service-failure causes are retired when later evidence proves the unit is missing
+
+## [2026-04-12 15:17] Added explicit operator clarification handling for troubleshoot threads
+- Added clarification parsing for follow-up inputs such as `it's actually a pod`, `it's actually a container`, and `it's actually a service`
+- Updated `troubleshoot` so those clarifications reuse the latest thread, reweight family scores immediately, rebuild the troubleshoot plan against the clarified object type, and retire incompatible causes instead of treating the clarification as a new incident
+- Updated README.md to document the clarification-driven thread pivot behavior
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- seeded smoke with `troubleshoot "why is worker 2 not up?"` followed by `troubleshoot "it's actually a pod"`: OK and the second run pivoted to `kubectl describe pod worker2`
+
+## [2026-04-12 15:23] Added discovery-first target existence bias for troubleshoot planning
+- Added target discovery scoring in the troubleshoot planner so the inferred target can be checked against local systemd units, runtime container names, and Kubernetes pod names before deeper probing
+- Used those existence signals to bias service, runtime, and Kubernetes hypotheses toward discovered objects instead of relying only on wording heuristics
+- Added tests covering pod discovery preference and normalized target variants such as `worker2` versus `worker-2`, and updated README.md to document the new discovery-first behavior
+
+### Validation results
+- `go test ./internal/registry ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+
+## [2026-04-12 15:25] Surfaced troubleshoot discovery evidence in CLI output
+- Added a `discovery` field to troubleshoot responses and rendered it in a dedicated `Discovery` section before findings
+- Populated discovery output with positive and negative existence checks for systemd units, runtime container names, and Kubernetes pod names that biased the initial troubleshoot branch
+- Updated README.md to document that discovery signals are now visible to the operator instead of staying implicit in the planner
+
+### Validation results
+- `go test ./internal/registry ./internal/output`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- rebuilt `cli-helper troubleshoot "why is worker 2 not up?"`: OK and rendered a `Discovery` section with visible existence checks
+
+## [2026-04-12 15:28] Used persisted discovery negatives to steer follow-up selection
+- Persisted `discovery` signals into troubleshoot thread state and carried prior discovery back into later troubleshoot responses
+- Updated family scoring so negative discovery like `No matching systemd unit name found` down-ranks that family for later runs, which lets the next unread probe skip dead branches sooner
+- Trimmed duplicate previous-discovery rendering so repeated troubleshoot runs stay readable while still exposing the persisted discovery context
+
+### Validation results
+- `go test ./internal/troubleshoot`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- repeated `cli-helper troubleshoot "why is worker 2 not up?"`: OK and second run advanced directly to `podman ps -a` with persisted discovery context
+
+## [2026-04-12 15:31] Added close-match object inventory to discovery output
+- Extended troubleshoot target discovery to collect nearby systemd unit, runtime container, and Kubernetes pod names when no exact match is found
+- Updated the `Discovery` section to show close local names like `worker@2`, `worker-2`, or `worker2-api` so operators can correct target naming before deeper probes
+- Added tests covering close-match ranking and discovery rendering for nearby object names, and updated README.md to document the new inventory behavior
+
+### Validation results
+- `go test ./internal/registry ./internal/output`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+
+## [2026-04-12 15:34] Added corrected-target follow-up suggestions from discovery matches
+- Turned close-match discovery results into direct follow-up suggestions such as `systemctl status worker@2 --no-pager -l`, `podman logs --tail 100 worker2-api`, or `kubectl describe pod worker-2`
+- Kept those suggestions separate from the main ranked branch list so operators can pivot to likely corrected object names without losing the original troubleshoot context
+- Updated README.md to document that nearby discovered names now produce actionable corrected-target suggestions
+
+### Validation results
+- `go test ./internal/registry`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
 
 ## [2026-04-11 22:05] LLM log export formats
 - Extended `cli-helper llm-log` with `--format text|json|markdown|csv` and `--output PATH` for both raw entries and `--stats` summaries

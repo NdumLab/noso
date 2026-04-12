@@ -100,17 +100,17 @@ func TestEnrichWithRunnerRuntimeFailure(t *testing.T) {
 func TestEnrichWithRunnerKubernetesFailure(t *testing.T) {
 	response := models.Response{
 		IntentID:    "troubleshoot_plan",
-		Command:     "kubectl describe pod web-7c5c",
+		Command:     "kubectl describe pod -n prod web-7c5c",
 		Explanation: "Built a ranked, read-only troubleshoot plan.",
 		Risk:        "Low",
 	}
 
 	runner := func(_ context.Context, command string) (string, error) {
 		switch command {
-		case "kubectl describe pod web-7c5c":
-			return "State: Waiting\nReason: CrashLoopBackOff\nEvents:\nWarning BackOff Back-off restarting failed container", nil
-		case "kubectl logs web-7c5c --tail=100":
-			return "panic: failed to connect to database", nil
+		case "kubectl describe pod -n prod web-7c5c":
+			return "Containers:\n  api:\n    Container ID: containerd://123\nState: Waiting\nReason: CrashLoopBackOff\nEvents:\nWarning BackOff Back-off restarting failed container", nil
+		case "kubectl logs -n prod web-7c5c -c api --tail=100":
+			return "panic: failed to connect to database: connection to server at db.internal port 5432 failed", nil
 		default:
 			return "", fmt.Errorf("unexpected command %q", command)
 		}
@@ -123,8 +123,23 @@ func TestEnrichWithRunnerKubernetesFailure(t *testing.T) {
 	if !containsPrefix(updated.Findings, "Kubernetes log evidence: The pasted log output contains") {
 		t.Fatalf("Findings = %#v", updated.Findings)
 	}
-	if !contains(updated.VerifiedFrom, "live:kubectl describe pod web-7c5c") || !contains(updated.VerifiedFrom, "live:kubectl logs web-7c5c --tail=100") {
+	if !contains(updated.VerifiedFrom, "live:kubectl describe pod -n prod web-7c5c") || !contains(updated.VerifiedFrom, "live:kubectl logs -n prod web-7c5c -c api --tail=100") {
 		t.Fatalf("VerifiedFrom = %#v", updated.VerifiedFrom)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl logs -n prod web-7c5c -c api --tail=100`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl get events -n prod --sort-by=.metadata.creationTimestamp`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `dig +short db.internal`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `nc -vz db.internal 5432`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if updated.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", updated.ContainerHint)
 	}
 }
 
@@ -141,9 +156,9 @@ func TestEnrichWithRunnerKubernetesPodsFailure(t *testing.T) {
 		case "kubectl get pods -A":
 			return "NAMESPACE NAME READY STATUS RESTARTS AGE\nprod web-7c5c 0/1 CrashLoopBackOff 8 10m", nil
 		case "kubectl describe pod -n prod web-7c5c":
-			return "State: Waiting\nReason: CrashLoopBackOff\nEvents:\nWarning BackOff Back-off restarting failed container", nil
-		case "kubectl logs -n prod web-7c5c --tail=100":
-			return "panic: failed to connect to database", nil
+			return "Containers:\n  api:\n    Container ID: containerd://123\nState: Waiting\nReason: CrashLoopBackOff\nEvents:\nWarning BackOff Back-off restarting failed container", nil
+		case "kubectl logs -n prod web-7c5c -c api --tail=100":
+			return "panic: failed to connect to database: connection to server at db.internal port 5432 failed", nil
 		default:
 			return "", fmt.Errorf("unexpected command %q", command)
 		}
@@ -158,6 +173,24 @@ func TestEnrichWithRunnerKubernetesPodsFailure(t *testing.T) {
 	}
 	if !containsPrefix(updated.Findings, "Kubernetes log evidence: The pasted log output contains") {
 		t.Fatalf("Findings = %#v", updated.Findings)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl describe pod -n prod web-7c5c`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl logs -n prod web-7c5c -c api --previous`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl get events -n prod --sort-by=.metadata.creationTimestamp`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `dig +short db.internal`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `nc -vz db.internal 5432`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if updated.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", updated.ContainerHint)
 	}
 }
 
@@ -181,6 +214,106 @@ func TestEnrichWithRunnerKubernetesMissingTool(t *testing.T) {
 	}
 	if !containsPrefix(updated.Warnings, "live kubernetes probe unavailable:") {
 		t.Fatalf("Warnings = %#v", updated.Warnings)
+	}
+}
+
+func TestEnrichWithRunnerKubernetesUsesContainerHintFromEvents(t *testing.T) {
+	response := models.Response{
+		IntentID:    "troubleshoot_plan",
+		Command:     "kubectl describe pod -n prod web-7c5c",
+		Explanation: "Built a ranked, read-only troubleshoot plan.",
+		Risk:        "Low",
+	}
+
+	runner := func(_ context.Context, command string) (string, error) {
+		switch command {
+		case "kubectl describe pod -n prod web-7c5c":
+			return "State: Waiting\nReason: CrashLoopBackOff\nEvents:\n  Warning  BackOff  kubelet  Back-off restarting failed container api in pod web-7c5c_prod(1234)", nil
+		case "kubectl logs -n prod web-7c5c -c api --tail=100":
+			return "panic: failed to connect to database: connection to server at db.internal port 5432 failed", nil
+		default:
+			return "", fmt.Errorf("unexpected command %q", command)
+		}
+	}
+
+	updated := enrichWithRunner(response, runner)
+	if !contains(updated.VerifiedFrom, "live:kubectl logs -n prod web-7c5c -c api --tail=100") {
+		t.Fatalf("VerifiedFrom = %#v", updated.VerifiedFrom)
+	}
+	if updated.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", updated.ContainerHint)
+	}
+}
+
+func TestEnrichWithRunnerKubernetesEventsUsesContainerHint(t *testing.T) {
+	response := models.Response{
+		IntentID:    "inspect_k8s_events",
+		Command:     "kubectl get events -n prod --sort-by=.metadata.creationTimestamp",
+		Explanation: "Shows recent cluster events in chronological order.",
+		Risk:        "Low",
+	}
+
+	runner := func(_ context.Context, command string) (string, error) {
+		switch command {
+		case "kubectl get events -n prod --sort-by=.metadata.creationTimestamp":
+			return "LAST SEEN TYPE REASON OBJECT MESSAGE\n10s Warning BackOff pod/web-7c5c Back-off restarting failed container api in pod web-7c5c_prod(1234)", nil
+		case "kubectl logs -n prod web-7c5c -c api --previous":
+			return "panic: failed to connect to database: connection to server at db.internal port 5432 failed", nil
+		default:
+			return "", fmt.Errorf("unexpected command %q", command)
+		}
+	}
+
+	updated := enrichWithRunner(response, runner)
+	if !containsPrefix(updated.Findings, "Kubernetes event evidence: The pasted Kubernetes event output contains failure signals") {
+		t.Fatalf("Findings = %#v", updated.Findings)
+	}
+	if !containsPrefix(updated.Findings, "Kubernetes event log evidence: The pasted log output contains") {
+		t.Fatalf("Findings = %#v", updated.Findings)
+	}
+	if !contains(updated.VerifiedFrom, "live:kubectl logs -n prod web-7c5c -c api --previous") {
+		t.Fatalf("VerifiedFrom = %#v", updated.VerifiedFrom)
+	}
+	if !containsPrefix(updated.NextSteps, "Evidence follow-up: Run `kubectl logs -n prod web-7c5c -c api --previous`") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if updated.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", updated.ContainerHint)
+	}
+}
+
+func TestEnrichWithRunnerKubernetesEventsImagePullDoesNotProbeLogs(t *testing.T) {
+	response := models.Response{
+		IntentID:    "inspect_k8s_events",
+		Command:     "kubectl get events -n prod --sort-by=.metadata.creationTimestamp",
+		Explanation: "Shows recent cluster events in chronological order.",
+		Risk:        "Low",
+	}
+
+	runner := func(_ context.Context, command string) (string, error) {
+		switch command {
+		case "kubectl get events -n prod --sort-by=.metadata.creationTimestamp":
+			return "LAST SEEN TYPE REASON OBJECT MESSAGE\n12s Warning Failed pod/api-6d8f Failed to pull image \"ghcr.io/example/app:bad\": rpc error\n11s Warning ImagePullBackOff pod/api-6d8f Back-off pulling image \"ghcr.io/example/app:bad\"", nil
+		default:
+			return "", fmt.Errorf("unexpected command %q", command)
+		}
+	}
+
+	updated := enrichWithRunner(response, runner)
+	if !containsPrefix(updated.Findings, "Kubernetes event evidence: The pasted Kubernetes event output contains failure signals") {
+		t.Fatalf("Findings = %#v", updated.Findings)
+	}
+	for _, verified := range updated.VerifiedFrom {
+		if strings.Contains(verified, "kubectl logs") {
+			t.Fatalf("VerifiedFrom should not include log probes for image pull failures: %#v", updated.VerifiedFrom)
+		}
+	}
+	combined := strings.Join(updated.NextSteps, " ")
+	if !strings.Contains(combined, "imagePullSecrets") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
+	}
+	if !strings.Contains(combined, "dig +short ghcr.io") {
+		t.Fatalf("NextSteps = %#v", updated.NextSteps)
 	}
 }
 

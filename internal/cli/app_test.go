@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/NdumLab/noso/internal/llm"
+	"github.com/NdumLab/noso/internal/troubleshoot"
 	"github.com/NdumLab/noso/pkg/models"
 )
 
@@ -422,6 +423,9 @@ func TestRunTroubleshootMode(t *testing.T) {
 	if !strings.Contains(stdout.String(), "systemctl status worker2 --no-pager -l") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "Likely Causes:") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
 }
 
 func TestRunTroubleshootHistoryMode(t *testing.T) {
@@ -482,6 +486,350 @@ func TestRunTroubleshootResetMode(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d", code, ExitOK)
 	}
 	if !strings.Contains(stdout.String(), "No troubleshoot history entries matched.") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootClarificationUsesLatestThread(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "why", "is", "worker", "2", "not", "up?"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("seed Run() code=%d err=%v", code, err)
+	}
+
+	stdout.Reset()
+	code, err = Run([]string{"troubleshoot", "it's", "actually", "a", "pod"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pod worker2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "applied operator clarification") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootAdoptsSuggestedTarget(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query: "why is worker 2 not up?",
+			SuggestedTargets: []troubleshoot.SuggestedTarget{{
+				Family:  "kubernetes",
+				Name:    "worker-2",
+				Command: "kubectl describe pod worker-2",
+			}},
+			FamilyScores: map[string]float64{"service": -1.0, "kubernetes": 1.5},
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "check", "worker-2"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pod worker-2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: worker-2 (kubernetes)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Previous discovery: No matching systemd unit name found for worker2.") {
+		t.Fatalf("stdout retained stale previous discovery after target adoption: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "Confirm the real unit name with `systemctl list-units --type=service | grep <name>` before probing systemd again.") {
+		t.Fatalf("stdout retained stale service follow-up after target adoption: %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootAdoptsSuggestedPVC(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query: "why is web-7c5c pending?",
+			SuggestedTargets: []troubleshoot.SuggestedTarget{{
+				Family:    "kubernetes-pvc",
+				Name:      "web-data",
+				Namespace: "prod",
+				Command:   "kubectl describe pvc -n prod web-data",
+			}},
+			FamilyScores: map[string]float64{"kubernetes": 1.8},
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "check", "web-data"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pvc -n prod web-data") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: web-data (kubernetes-pvc, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootAdoptsSuggestedDeployment(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query: "why is web failing?",
+			SuggestedTargets: []troubleshoot.SuggestedTarget{{
+				Family:    "kubernetes-deployment",
+				Name:      "web",
+				Namespace: "prod",
+				Command:   "kubectl describe deployment -n prod web",
+			}},
+			FamilyScores: map[string]float64{"kubernetes": 1.6},
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "check", "web"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe deployment -n prod web") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: web (kubernetes-deployment, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootAdoptsSuggestedService(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query: "why is api unavailable?",
+			SuggestedTargets: []troubleshoot.SuggestedTarget{{
+				Family:    "kubernetes-service",
+				Name:      "api",
+				Namespace: "prod",
+				Command:   "kubectl describe service -n prod api",
+			}},
+			FamilyScores: map[string]float64{"kubernetes": 1.5},
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "check", "api"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe service -n prod api") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: api (kubernetes-service, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootRefinesNamespaceForAdoptedPod(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:        "why is worker 2 not up?",
+			ActiveFamily: "kubernetes",
+			ActiveTarget: "worker-2",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "worker-2", "in", "prod"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pod -n prod worker-2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: worker-2 (kubernetes, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootRefinesNamespaceForAdoptedPVC(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:           "why is web-7c5c pending?",
+			ActiveFamily:    "kubernetes-pvc",
+			ActiveTarget:    "web-data",
+			ActiveNamespace: "prod",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "web-data", "in", "prod"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pvc -n prod web-data") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: web-data (kubernetes-pvc, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootRefinesNamespaceForAdoptedDeployment(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:           "why is web failing?",
+			ActiveFamily:    "kubernetes-deployment",
+			ActiveTarget:    "web",
+			ActiveNamespace: "prod",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "web", "in", "prod"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe deployment -n prod web") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: web (kubernetes-deployment, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootRefinesNamespaceForAdoptedService(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:           "why is api unavailable?",
+			ActiveFamily:    "kubernetes-service",
+			ActiveTarget:    "api",
+			ActiveNamespace: "prod",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "api", "in", "prod"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe service -n prod api") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: api (kubernetes-service, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunTroubleshootRefinesRuntimeHint(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", statePath)
+
+	if err := troubleshoot.SaveState(statePath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:        "why is worker 2 not up?",
+			ActiveFamily: "runtime",
+			ActiveTarget: "worker2-api",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "it", "is", "podman"}, strings.NewReader(""), stdout, stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if code != ExitOK {
+		t.Fatalf("exit code = %d, want %d", code, ExitOK)
+	}
+	if !strings.Contains(stdout.String(), "podman ps -a") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Adopted target: worker2-api (runtime, podman)") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }

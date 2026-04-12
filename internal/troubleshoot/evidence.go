@@ -39,6 +39,12 @@ func ApplyThreadContext(response models.Response, thread StateThread) models.Res
 	for _, finding := range thread.LastFindings {
 		response.Findings = appendUnique(response.Findings, "Previous finding: "+finding)
 	}
+	for _, item := range thread.LastDiscovery {
+		if containsExact(response.Discovery, item) {
+			continue
+		}
+		response.Discovery = appendUnique(response.Discovery, "Previous discovery: "+item)
+	}
 	for _, warning := range thread.LastWarnings {
 		response.Warnings = appendUnique(response.Warnings, "previous thread warning: "+warning)
 	}
@@ -55,6 +61,8 @@ func enrichWithRunner(response models.Response, runner commandRunner) models.Res
 		return enrichServiceEvidence(response, runner)
 	case strings.HasPrefix(lower, "docker ps"), strings.HasPrefix(lower, "podman ps"):
 		return enrichRuntimeEvidence(response, runner)
+	case strings.HasPrefix(lower, "kubectl get events"):
+		return enrichKubernetesEventsEvidence(response, runner)
 	case strings.HasPrefix(lower, "kubectl get pods"):
 		return enrichKubernetesPodsEvidence(response, runner)
 	case strings.HasPrefix(lower, "kubectl describe pod"):
@@ -199,16 +207,14 @@ func enrichKubernetesEvidence(response models.Response, runner commandRunner) mo
 	}
 	response.Findings = appendUnique(response.Findings, "Kubernetes evidence: "+interpreted.Explanation)
 	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+response.Command)
-	response.NextSteps = appendEvidenceSteps(response.NextSteps, interpreted.NextSteps...)
-
 	pod, namespace := podFromDescribeCommand(response.Command)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, interpreted.ContainerHint, extractPrimaryContainerName(output))
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(interpreted.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
 	if pod == "" || !shouldQueryKubectlLogs(output) {
 		return response
 	}
-	logCommand := fmt.Sprintf("kubectl logs %s --tail=100", pod)
-	if namespace != "" {
-		logCommand = fmt.Sprintf("kubectl logs -n %s %s --tail=100", namespace, pod)
-	}
+	logCommand := kubernetesLogsCommand(pod, namespace, response.ContainerHint, "--tail=100")
 	logOutput, err := runner(context.Background(), logCommand)
 	if err != nil {
 		response.Warnings = append(response.Warnings, "live kubernetes log probe failed: "+err.Error())
@@ -221,6 +227,7 @@ func enrichKubernetesEvidence(response models.Response, runner commandRunner) mo
 	}
 	response.Findings = appendUnique(response.Findings, "Kubernetes log evidence: "+logInterpret.Explanation)
 	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+logCommand)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, logInterpret.ContainerHint)
 	response.NextSteps = appendEvidenceSteps(response.NextSteps, logInterpret.NextSteps...)
 	return response
 }
@@ -242,9 +249,10 @@ func enrichKubernetesPodsEvidence(response models.Response, runner commandRunner
 	}
 	response.Findings = appendUnique(response.Findings, "Kubernetes evidence: "+interpreted.Explanation)
 	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+response.Command)
-	response.NextSteps = appendEvidenceSteps(response.NextSteps, interpreted.NextSteps...)
-
 	pod, namespace := firstUnhealthyPodFromGetPods(output)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, interpreted.ContainerHint)
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(interpreted.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
 	if pod == "" {
 		return response
 	}
@@ -264,15 +272,14 @@ func enrichKubernetesPodsEvidence(response models.Response, runner commandRunner
 	}
 	response.Findings = appendUnique(response.Findings, "Kubernetes describe evidence: "+describeInterpret.Explanation)
 	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+describeCommand)
-	response.NextSteps = appendEvidenceSteps(response.NextSteps, describeInterpret.NextSteps...)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, describeInterpret.ContainerHint, extractPrimaryContainerName(describeOutput))
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(describeInterpret.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
 
 	if !shouldQueryKubectlLogs(describeOutput) {
 		return response
 	}
-	logCommand := fmt.Sprintf("kubectl logs %s --tail=100", pod)
-	if namespace != "" {
-		logCommand = fmt.Sprintf("kubectl logs -n %s %s --tail=100", namespace, pod)
-	}
+	logCommand := kubernetesLogsCommand(pod, namespace, response.ContainerHint, "--tail=100")
 	logOutput, err := runner(context.Background(), logCommand)
 	if err != nil {
 		response.Warnings = append(response.Warnings, "live kubernetes log probe failed: "+err.Error())
@@ -285,7 +292,53 @@ func enrichKubernetesPodsEvidence(response models.Response, runner commandRunner
 	}
 	response.Findings = appendUnique(response.Findings, "Kubernetes log evidence: "+logInterpret.Explanation)
 	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+logCommand)
-	response.NextSteps = appendEvidenceSteps(response.NextSteps, logInterpret.NextSteps...)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, logInterpret.ContainerHint)
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(logInterpret.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
+	return response
+}
+
+func enrichKubernetesEventsEvidence(response models.Response, runner commandRunner) models.Response {
+	output, err := runner(context.Background(), response.Command)
+	if err != nil {
+		response.Warnings = append(response.Warnings, "live kubernetes events probe failed: "+err.Error())
+		return response
+	}
+	interpreted, err := interpret.Output(response.Command, output)
+	if err != nil {
+		response.Warnings = append(response.Warnings, "live kubernetes events interpretation failed: "+err.Error())
+		return response
+	}
+	if commandUnavailableOutput(output) {
+		response.Warnings = append(response.Warnings, "live kubernetes events probe unavailable: "+strings.TrimSpace(output))
+		return response
+	}
+	response.Findings = appendUnique(response.Findings, "Kubernetes event evidence: "+interpreted.Explanation)
+	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+response.Command)
+	pod := interpretEventPod(output)
+	namespace := interpretEventNamespace(response.Command, output)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, interpreted.ContainerHint)
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(interpreted.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
+	if pod == "" || !shouldQueryKubectlLogs(output) {
+		return response
+	}
+	logCommand := kubernetesLogsCommand(pod, namespace, response.ContainerHint, "--previous")
+	logOutput, err := runner(context.Background(), logCommand)
+	if err != nil {
+		response.Warnings = append(response.Warnings, "live kubernetes event log probe failed: "+err.Error())
+		return response
+	}
+	logInterpret, err := interpret.Output(logCommand, logOutput)
+	if err != nil {
+		response.Warnings = append(response.Warnings, "live kubernetes event log interpretation failed: "+err.Error())
+		return response
+	}
+	response.Findings = appendUnique(response.Findings, "Kubernetes event log evidence: "+logInterpret.Explanation)
+	response.VerifiedFrom = appendUnique(response.VerifiedFrom, "live:"+logCommand)
+	response.ContainerHint = firstNonEmpty(response.ContainerHint, logInterpret.ContainerHint)
+	response.NextSteps = appendEvidenceSteps(response.NextSteps, kubernetesNextSteps(logInterpret.NextSteps, pod, namespace, response.ContainerHint)...)
+	response.NextSteps = kubernetesNextSteps(response.NextSteps, pod, namespace, response.ContainerHint)
 	return response
 }
 
@@ -379,6 +432,121 @@ func firstUnhealthyPodFromGetPods(output string) (string, string) {
 	return "", ""
 }
 
+func interpretEventPod(output string) string {
+	return interpret.ExtractEventPodForTroubleshoot(output)
+}
+
+func interpretEventNamespace(command, output string) string {
+	return interpret.ExtractEventNamespaceForTroubleshoot(command, output)
+}
+
+func extractPrimaryContainerName(output string) string {
+	lines := strings.Split(output, "\n")
+	inContainers := false
+	for _, raw := range lines {
+		line := strings.TrimRight(raw, "\r")
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		switch trimmed {
+		case "Containers:":
+			inContainers = true
+			continue
+		case "Conditions:", "Volumes:", "QoS Class:", "Events:":
+			if inContainers {
+				return ""
+			}
+		}
+		if !inContainers {
+			continue
+		}
+		if !strings.HasPrefix(line, "  ") {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimSpace(line), ":")
+		if isContainerName(name) {
+			return name
+		}
+	}
+	return ""
+}
+
+func isContainerName(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func kubernetesLogsCommand(pod, namespace, container string, args ...string) string {
+	if strings.TrimSpace(pod) == "" {
+		return "kubectl logs"
+	}
+	fields := []string{"kubectl", "logs"}
+	if strings.TrimSpace(namespace) != "" {
+		fields = append(fields, "-n", namespace)
+	}
+	fields = append(fields, pod)
+	if strings.TrimSpace(container) != "" {
+		fields = append(fields, "-c", container)
+	}
+	fields = append(fields, args...)
+	return strings.Join(fields, " ")
+}
+
+func kubernetesNextSteps(steps []string, pod, namespace, container string) []string {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(steps)+1)
+	eventsAdded := false
+	for _, step := range steps {
+		updated := strings.TrimSpace(step)
+		if pod != "" {
+			updated = strings.ReplaceAll(updated, "<pod>", pod)
+		}
+		if namespace != "" {
+			updated = strings.ReplaceAll(updated, "<namespace>", namespace)
+			updated = strings.ReplaceAll(updated, "kubectl logs "+pod+" ", "kubectl logs -n "+namespace+" "+pod+" ")
+			updated = strings.ReplaceAll(updated, "kubectl describe pod "+pod+" ", "kubectl describe pod -n "+namespace+" "+pod+" ")
+		}
+		updated = strings.ReplaceAll(updated, "kubectl describe pod "+pod+" -n "+namespace, "kubectl describe pod -n "+namespace+" "+pod)
+		updated = strings.ReplaceAll(updated, "kubectl logs "+pod+" -n "+namespace, "kubectl logs -n "+namespace+" "+pod)
+		updated = strings.ReplaceAll(updated, "kubectl describe pod -n "+namespace+" "+pod+" -n "+namespace, "kubectl describe pod -n "+namespace+" "+pod)
+		updated = strings.ReplaceAll(updated, "kubectl logs -n "+namespace+" "+pod+" -n "+namespace, "kubectl logs -n "+namespace+" "+pod)
+		if pod != "" && strings.TrimSpace(container) != "" && strings.Contains(updated, "kubectl logs") {
+			updated = strings.ReplaceAll(updated, "kubectl logs -n "+namespace+" "+pod+" --tail=100", kubernetesLogsCommand(pod, namespace, container, "--tail=100"))
+			updated = strings.ReplaceAll(updated, "kubectl logs -n "+namespace+" "+pod+" --previous", kubernetesLogsCommand(pod, namespace, container, "--previous"))
+			updated = strings.ReplaceAll(updated, "kubectl logs "+pod+" --tail=100", kubernetesLogsCommand(pod, namespace, container, "--tail=100"))
+			updated = strings.ReplaceAll(updated, "kubectl logs "+pod+" --previous", kubernetesLogsCommand(pod, namespace, container, "--previous"))
+		}
+		out = append(out, updated)
+		if strings.Contains(updated, "kubectl get events") {
+			eventsAdded = true
+		}
+	}
+	if pod != "" && namespace != "" && !eventsAdded {
+		out = append(out, "Run `kubectl get events -n "+namespace+" --sort-by=.metadata.creationTimestamp` to inspect recent namespace-scoped scheduler, image-pull, and restart events for "+pod+".")
+	}
+	return out
+}
+
 func commandUnavailableOutput(output string) bool {
 	lower := strings.ToLower(strings.TrimSpace(output))
 	return strings.Contains(lower, "command not found") || strings.Contains(lower, "not recognized as an internal or external command")
@@ -393,6 +561,15 @@ func appendEvidenceSteps(existing []string, extra ...string) []string {
 		out = appendUnique(out, "Evidence follow-up: "+step)
 	}
 	return out
+}
+
+func containsExact(values []string, want string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == strings.TrimSpace(want) {
+			return true
+		}
+	}
+	return false
 }
 
 func alreadyExecuted(thread StateThread, command string) bool {
@@ -449,7 +626,7 @@ func nextPreferredFamilies(thread StateThread) []string {
 		return ordered
 	}
 
-	text := strings.ToLower(strings.Join(append(append([]string{}, thread.LastFindings...), thread.LastWarnings...), "\n"))
+	text := strings.ToLower(strings.Join(append(append(append([]string{}, thread.LastDiscovery...), thread.LastFindings...), thread.LastWarnings...), "\n"))
 	switch {
 	case strings.Contains(text, "unit could not be found"), strings.Contains(text, "service name is wrong"), strings.Contains(text, "not managed by systemd"):
 		return []string{"runtime", "kubernetes", "service"}

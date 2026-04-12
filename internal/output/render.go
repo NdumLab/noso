@@ -23,10 +23,27 @@ func RenderResponse(response models.Response, asJSON bool, quiet bool) (string, 
 	fmt.Fprintf(&b, "Intent: %s\n\n", response.IntentID)
 	fmt.Fprintf(&b, "Command:\n%s\n\n", response.Command)
 	fmt.Fprintf(&b, "Explanation:\n%s\n\n", response.Explanation)
+	if response.AdoptedTarget != "" {
+		fmt.Fprintf(&b, "Adopted target: %s\n\n", response.AdoptedTarget)
+	}
+	if len(response.Discovery) > 0 {
+		fmt.Fprint(&b, "Discovery:\n")
+		for _, item := range response.Discovery {
+			fmt.Fprintf(&b, "- %s\n", item)
+		}
+		fmt.Fprint(&b, "\n")
+	}
 	if len(response.Findings) > 0 {
 		fmt.Fprint(&b, "Findings:\n")
 		for _, finding := range response.Findings {
 			fmt.Fprintf(&b, "- %s\n", finding)
+		}
+		fmt.Fprint(&b, "\n")
+	}
+	if len(response.LikelyCauses) > 0 {
+		fmt.Fprint(&b, "Likely Causes:\n")
+		for _, cause := range response.LikelyCauses {
+			fmt.Fprintf(&b, "- %s\n", cause)
 		}
 		fmt.Fprint(&b, "\n")
 	}

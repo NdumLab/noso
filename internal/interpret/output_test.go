@@ -78,6 +78,180 @@ func TestInterpretKubectlDetectsUnhealthyPods(t *testing.T) {
 	}
 }
 
+func TestInterpretKubectlGetEventsExtractsPodAndContainer(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n10s Warning BackOff pod/web-7c5c Back-off restarting failed container api in pod web-7c5c_prod(1234)\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.IntentID != "interpret_kubectl_get_events" {
+		t.Fatalf("IntentID = %q", response.IntentID)
+	}
+	if response.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", response.ContainerHint)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe pod -n prod web-7c5c") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "kubectl logs -n prod web-7c5c -c api --previous") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsImagePullBackoff(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n12s Warning Failed pod/api-6d8f Failed to pull image \"ghcr.io/example/app:bad\": rpc error\n11s Warning ImagePullBackOff pod/api-6d8f Back-off pulling image \"ghcr.io/example/app:bad\"\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe pod -n prod api-6d8f") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "imagePullSecrets") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "dig +short ghcr.io") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if strings.Contains(combined, "kubectl logs -n prod api-6d8f") {
+		t.Fatalf("NextSteps should not prioritize logs for image-pull failures: %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsImagePullRegistryPort(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n12s Warning Failed pod/api-6d8f Failed to pull image \"registry.internal:5000/team/app:bad\": rpc error\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "dig +short registry.internal") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "nc -vz registry.internal 5000") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsSchedulingFailure(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedScheduling pod/web-7c5c 0/3 nodes are available: 3 Insufficient memory.\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe pod -n prod web-7c5c") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "taint") && !strings.Contains(combined, "capacity") && !strings.Contains(combined, "affinity") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if strings.Contains(combined, "kubectl logs -n prod web-7c5c") {
+		t.Fatalf("NextSteps should not prioritize logs for scheduling failures: %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "allocatable memory") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsSchedulingTaintFailure(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedScheduling pod/web-7c5c 0/3 nodes are available: 1 node(s) had untolerated taint {dedicated: gpu}.\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "tolerations") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsSchedulingAffinityFailure(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedScheduling pod/web-7c5c 0/3 nodes are available: 3 node(s) didn't match Pod's node affinity.\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "node affinity") && !strings.Contains(combined, "selector") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsSchedulingNamedNodeFailure(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedScheduling pod/web-7c5c node ip-10-0-1-12 had untolerated taint {dedicated: gpu}.\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe node ip-10-0-1-12") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsMountFailurePVC(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedMount pod/web-7c5c Unable to attach or mount volumes: unmounted volumes=[data], unattached volumes=[data]: timed out waiting for the condition, persistentvolumeclaim \"web-data\" not found\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe pvc -n prod web-data") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsMountFailureSecret(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedMount pod/web-7c5c MountVolume.SetUp failed for volume \"tls\": secret \"web-tls\" not found\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe secret -n prod web-tls") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsMountFailureConfigMap(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedMount pod/web-7c5c MountVolume.SetUp failed for volume \"cfg\": configmap \"web-config\" not found\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe configmap -n prod web-config") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsDeploymentOwnerFollowUp(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning BackOff pod/web-7c5c Back-off restarting failed container api in pod web-7c5c_prod(1234), controlled by deployment/web\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe deployment -n prod web") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretKubectlGetEventsServiceOwnerFollowUp(t *testing.T) {
+	text := "LAST SEEN TYPE REASON OBJECT MESSAGE\n20s Warning FailedMount pod/api-6d8f secret \"api-tls\" not found while serving traffic for service/api\n"
+	response, err := Output("kubectl get events -n prod --sort-by=.metadata.creationTimestamp", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "kubectl describe service -n prod api") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
 func TestInterpretKubectlDescribePodDetectsCrashLoop(t *testing.T) {
 	text := "State:          Waiting\n  Reason:       CrashLoopBackOff\nEvents:\n  Warning  BackOff  kubelet  Back-off restarting failed container\n"
 	response, err := Output("kubectl describe pod web-7c5c", text)
@@ -89,6 +263,28 @@ func TestInterpretKubectlDescribePodDetectsCrashLoop(t *testing.T) {
 	}
 	if response.Confidence != "High" {
 		t.Fatalf("Confidence = %q", response.Confidence)
+	}
+}
+
+func TestInterpretKubectlDescribePodExtractsContainerHintFromEvents(t *testing.T) {
+	text := "Events:\n  Warning  BackOff  kubelet  Back-off restarting failed container api in pod web-7c5c_prod(1234)\n"
+	response, err := Output("kubectl describe pod web-7c5c", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", response.ContainerHint)
+	}
+}
+
+func TestInterpretKubectlLogsExtractsContainerHint(t *testing.T) {
+	text := "Defaulted container \"api\" out of: api, sidecar\npanic: failed to connect to database: connection to server at db.internal port 5432 failed\n"
+	response, err := Output("kubectl logs -n prod web-7c5c --tail=100", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.ContainerHint != "api" {
+		t.Fatalf("ContainerHint = %q, want api", response.ContainerHint)
 	}
 }
 
@@ -117,6 +313,51 @@ func TestInterpretRuntimeLogsDetectsErrors(t *testing.T) {
 	}
 	if response.Confidence != "High" {
 		t.Fatalf("Confidence = %q", response.Confidence)
+	}
+}
+
+func TestInterpretRuntimeLogsDetectsDatabaseConnectivity(t *testing.T) {
+	text := "panic: failed to connect to database: connection to server at db.internal port 5432 failed\n"
+	response, err := Output("podman logs --tail 100 worker2", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "dig +short db.internal") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "nc -vz db.internal 5432") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretJournalctlDetectsDNSResolution(t *testing.T) {
+	text := "lookup api.internal on 10.96.0.10:53: no such host\n"
+	response, err := Output("journalctl -u nginx -n 50 --no-pager", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(combined, "dig +short api.internal") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "/etc/resolv.conf") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestExtractDependencyHostFallbackEmpty(t *testing.T) {
+	if got := extractDependencyHost("generic connection failure without a host"); got != "" {
+		t.Fatalf("extractDependencyHost() = %q, want empty", got)
+	}
+}
+
+func TestExtractDependencyPort(t *testing.T) {
+	if got := extractDependencyPort("connection to server at db.internal port 5432 failed"); got != "5432" {
+		t.Fatalf("extractDependencyPort() = %q, want 5432", got)
+	}
+	if got := extractDependencyPort("dial tcp api.internal:8443: connect: connection refused"); got != "8443" {
+		t.Fatalf("extractDependencyPort() = %q, want 8443", got)
 	}
 }
 

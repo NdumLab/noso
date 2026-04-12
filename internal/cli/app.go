@@ -257,14 +257,68 @@ func runTroubleshoot(args []string, stdout io.Writer, stderr io.Writer, jsonOut,
 		return ExitUsage, fmt.Errorf("query too long: %d bytes (max %d)", len(query), maxQueryBytes)
 	}
 
-	response, ok, err := registry.TroubleshootPlan(query, env, collector)
-	if err != nil {
-		return ExitErr, err
+	state, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath)
+	if stateErr != nil && !quiet {
+		stateErr = fmt.Errorf("troubleshoot state unavailable: %w", stateErr)
 	}
-	if !ok && cfg.LLMEnabled {
-		response, ok, err = resolveWithLLM(cfg, query, env, collector)
+	planningQuery := query
+	threadKey := query
+	var threadContext troubleshoot.StateThread
+	var clarificationHint troubleshoot.ClarificationHint
+	var clarified bool
+	var adoptedTarget string
+	var directResponse models.Response
+	var directResponseOK bool
+	if stateErr == nil {
+		if latestThread, suggestion, ok := troubleshoot.ResolveSuggestedTarget(state, query); ok {
+			planningQuery = troubleshoot.ApplySuggestedTargetQuery(latestThread.Query, suggestion)
+			threadKey = latestThread.Query
+			threadContext = troubleshoot.ApplySuggestedTarget(latestThread, suggestion)
+			adoptedTarget = formatSuggestedTarget(suggestion)
+			if response, ok := troubleshoot.SuggestedTargetResponse(suggestion); ok {
+				directResponse = response
+				directResponseOK = true
+			}
+			state = troubleshoot.UpdateThread(state, threadKey, threadContext)
+		} else if latestThread, hint, ok := troubleshoot.ResolveClarification(state, query); ok {
+			clarified = true
+			clarificationHint = hint
+			planningQuery = troubleshoot.ApplyClarificationQuery(latestThread.Query, hint)
+			threadKey = latestThread.Query
+			threadContext = troubleshoot.ApplyClarificationHint(latestThread, hint)
+			state = troubleshoot.UpdateThread(state, threadKey, threadContext)
+		}
+		if latestThread, refinement, ok := troubleshoot.ResolveThreadRefinement(state, query); ok {
+			threadKey = latestThread.Query
+			threadContext = troubleshoot.ApplyThreadRefinement(latestThread, refinement)
+			planningQuery = troubleshoot.ApplyThreadRefinementQuery(planningQuery, threadContext, refinement)
+			if threadContext.ActiveTarget != "" {
+				adoptedTarget = formatAdoptedTarget(threadContext)
+			}
+			if response, ok := directResponseForThread(threadContext); ok {
+				directResponse = response
+				directResponseOK = true
+			}
+			state = troubleshoot.UpdateThread(state, threadKey, threadContext)
+		}
+	}
+
+	var response models.Response
+	var ok bool
+	var err error
+	if directResponseOK {
+		response = directResponse
+		ok = true
+	} else {
+		response, ok, err = registry.TroubleshootPlan(planningQuery, env, collector)
 		if err != nil {
 			return ExitErr, err
+		}
+		if !ok && cfg.LLMEnabled {
+			response, ok, err = resolveWithLLM(cfg, planningQuery, env, collector)
+			if err != nil {
+				return ExitErr, err
+			}
 		}
 	}
 	if !ok {
@@ -275,21 +329,38 @@ func runTroubleshoot(args []string, stdout io.Writer, stderr io.Writer, jsonOut,
 		response.IntentID = "troubleshoot_unclassified"
 		response.ExpectedOutput = "A narrower troubleshoot question that names the failing service, container, pod, or host."
 	} else {
-		if state, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath); stateErr == nil {
-			if thread, found := troubleshoot.FindThread(state, query); found {
+		var existing troubleshoot.StateThread
+		if stateErr == nil {
+			if thread, found := troubleshoot.FindThread(state, threadKey); found {
+				existing = thread
 				response = troubleshoot.ApplyThreadContext(response, thread)
 			}
-		} else if !quiet {
-			response.Warnings = append(response.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
 		}
 		response = troubleshoot.EnrichWithLiveEvidence(response)
+		specializeThread := troubleshoot.PreviewThread(existing, threadKey, response)
+		if stateErr == nil {
+			response = troubleshoot.SpecializeInfrastructureProbes(response, env, specializeThread)
+		} else {
+			response = troubleshoot.SpecializeInfrastructureProbes(response, env, troubleshoot.StateThread{})
+		}
+		if adoptedTarget != "" {
+			response.AdoptedTarget = adoptedTarget
+		}
 	}
-	if state, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath); stateErr == nil {
-		if saveErr := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshoot.UpdateState(state, query, response)); saveErr != nil && !quiet {
+	if stateErr == nil {
+		var existing troubleshoot.StateThread
+		if thread, found := troubleshoot.FindThread(state, threadKey); found {
+			existing = thread
+		}
+		response = troubleshoot.AttachLikelyCauses(response, troubleshoot.PreviewThread(existing, threadKey, response))
+		if clarified {
+			response.Warnings = append(response.Warnings, "applied operator clarification: treating the current thread as a "+clarificationHint.Label+" problem")
+		}
+		if saveErr := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshoot.UpdateState(state, threadKey, response)); saveErr != nil && !quiet {
 			response.Warnings = append(response.Warnings, "troubleshoot state save failed: "+saveErr.Error())
 		}
 	} else if !quiet {
-		response.Warnings = append(response.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
+		response.Warnings = append(response.Warnings, stateErr.Error())
 	}
 
 	if err := logger.Append(query, response); err != nil && !quiet {
@@ -330,6 +401,66 @@ func runHistory(args []string, stdout io.Writer, stderr io.Writer, jsonOut, quie
 	}
 	fmt.Fprint(stdout, rendered)
 	return ExitOK, nil
+}
+
+func formatAdoptedTarget(thread troubleshoot.StateThread) string {
+	if thread.ActiveTarget == "" || thread.ActiveFamily == "" {
+		return ""
+	}
+	parts := []string{thread.ActiveFamily}
+	if thread.ActiveNamespace != "" {
+		parts = append(parts, "namespace "+thread.ActiveNamespace)
+	}
+	if thread.RuntimeHint != "" {
+		parts = append(parts, thread.RuntimeHint)
+	}
+	return thread.ActiveTarget + " (" + strings.Join(parts, ", ") + ")"
+}
+
+func formatSuggestedTarget(suggestion troubleshoot.SuggestedTarget) string {
+	if suggestion.Name == "" || suggestion.Family == "" {
+		return ""
+	}
+	parts := []string{suggestion.Family}
+	if suggestion.Namespace != "" {
+		parts = append(parts, "namespace "+suggestion.Namespace)
+	}
+	return suggestion.Name + " (" + strings.Join(parts, ", ") + ")"
+}
+
+func directResponseForThread(thread troubleshoot.StateThread) (models.Response, bool) {
+	if thread.ActiveTarget == "" || thread.ActiveFamily == "" {
+		return models.Response{}, false
+	}
+	var command string
+	switch thread.ActiveFamily {
+	case "kubernetes-pvc":
+		command = "kubectl describe pvc " + thread.ActiveTarget
+	case "kubernetes-secret":
+		command = "kubectl describe secret " + thread.ActiveTarget
+	case "kubernetes-configmap":
+		command = "kubectl describe configmap " + thread.ActiveTarget
+	case "kubernetes-deployment":
+		command = "kubectl describe deployment " + thread.ActiveTarget
+	case "kubernetes-service":
+		command = "kubectl describe service " + thread.ActiveTarget
+	case "kubernetes-node":
+		command = "kubectl describe node " + thread.ActiveTarget
+	default:
+		return models.Response{}, false
+	}
+	if thread.ActiveNamespace != "" && thread.ActiveFamily != "kubernetes-node" {
+		fields := strings.Fields(command)
+		if len(fields) >= 4 {
+			command = strings.Join([]string{fields[0], fields[1], fields[2], "-n", thread.ActiveNamespace, fields[3]}, " ")
+		}
+	}
+	return troubleshoot.SuggestedTargetResponse(troubleshoot.SuggestedTarget{
+		Family:    thread.ActiveFamily,
+		Name:      thread.ActiveTarget,
+		Namespace: thread.ActiveNamespace,
+		Command:   command,
+	})
 }
 
 func runLLMLog(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
