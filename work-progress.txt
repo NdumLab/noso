@@ -627,6 +627,15 @@
 - `staticcheck ./...`: OK
 - `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats`: OK
 
+## [2026-04-12 00:18] Incident ingest label-to-target promotion
+- Extended incident ingest so correlated alert labels now seed the incident target directly for pods, deployments, services, PVCs, secrets, configmaps, nodes, and hosts
+- Populated incident records with an initial read-only probe such as `kubectl describe pod ...` or `kubectl describe service ...`, plus follow-up observation steps where the label context is strong enough
+- Added focused state, observe, and CLI coverage to prove service- and pod-labeled alerts open as targeted incidents instead of metadata-only records
+- Updated the README incident-ingest section to document correlation-aware dedup plus label-driven targeting
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+
 ## [2026-04-12 18:12] Kubernetes owner-object adoption and CI hardening
 - Completed the in-flight event-owner path so `kubectl get events` owner references for Deployments and Services now become structured troubleshoot suggestions, direct inspection responses, and stateful adopted targets across follow-up queries
 - Extended troubleshoot adoption, refinement, active-thread context, and direct-response handling to cover `kubernetes-deployment` and `kubernetes-service` families alongside existing pod, PVC, Secret, ConfigMap, and node flows
@@ -689,6 +698,15 @@
 - `go test ./internal/incident ./internal/cli`: OK
 - `go build ./cmd/cli-helper`: OK
 - `./cmd/cli-helper --help`: OK and shows payload-based ingest examples
+
+## [2026-04-12 20:12] Correlation-aware alert dedup
+- Extended incident alert upsert to derive a correlation key from source plus workload labels like cluster, namespace, service, deployment, pod, host, instance, job, and alertname
+- Related alerts now merge into one incident even when the query text differs, and incident status now surfaces the correlation key and alert count
+- Added tests covering both state-level and CLI-level correlated ingest behavior so repeated related alerts increment one incident instead of creating parallel duplicates
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+- `go build ./cmd/cli-helper`: OK
 
 ## [2026-04-12 17:18] Make Kubernetes log probes container-aware
 - Updated the live Kubernetes evidence loop to carry the discovered `container_hint` into both `kubectl logs` execution and rendered `kubectl logs` follow-up steps
