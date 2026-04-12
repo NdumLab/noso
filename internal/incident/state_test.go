@@ -289,3 +289,39 @@ func TestBootstrapThreadFromIncidentRecord(t *testing.T) {
 		t.Fatal("expected discovery hint from alert labels")
 	}
 }
+
+func TestSyncBootstrapThreadRenamesCorrelatedQueryByTarget(t *testing.T) {
+	state := troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:           "api availability alert",
+			IntentID:        "incident_ingest",
+			ActiveFamily:    "kubernetes-service",
+			ActiveTarget:    "api",
+			ActiveNamespace: "prod",
+			LastCommand:     "kubectl describe service -n prod api",
+			Executed:        []string{"kubectl describe service -n prod api"},
+			FamilyScores:    map[string]float64{"kubernetes-service": 1},
+		}},
+	}
+	record := Record{
+		Query:        "api latency alert",
+		ActiveFamily: "kubernetes-service",
+		ActiveTarget: "api",
+		Namespace:    "prod",
+		LastCommand:  "kubectl describe service -n prod api",
+	}
+	updated := SyncBootstrapThread(state, record)
+	if len(updated.Threads) != 1 {
+		t.Fatalf("len(Threads) = %d, want 1", len(updated.Threads))
+	}
+	thread, ok := troubleshoot.FindThread(updated, "api latency alert")
+	if !ok {
+		t.Fatal("expected renamed thread under the latest correlated query")
+	}
+	if len(thread.Executed) != 1 || thread.Executed[0] != "kubectl describe service -n prod api" {
+		t.Fatalf("Executed = %#v", thread.Executed)
+	}
+	if _, ok := troubleshoot.FindThread(updated, "api availability alert"); ok {
+		t.Fatal("old correlated query should no longer have a separate thread")
+	}
+}

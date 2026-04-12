@@ -570,12 +570,7 @@ func runIncidentIngest(args []string, stdin io.Reader, stdout io.Writer, stderr 
 			if !ok {
 				continue
 			}
-			if _, found := troubleshoot.FindThread(troubleshootState, record.Query); found {
-				continue
-			}
-			if thread, ok := incident.BootstrapThread(record); ok {
-				troubleshootState = troubleshoot.UpdateThread(troubleshootState, record.Query, thread)
-			}
+			troubleshootState = incident.SyncBootstrapThread(troubleshootState, record)
 		}
 		if err := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshootState); err != nil {
 			fmt.Fprintf(stderr, "warning: troubleshoot state save failed: %v\n", err)

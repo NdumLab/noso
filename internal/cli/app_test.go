@@ -350,6 +350,66 @@ func TestRunTroubleshootUsesBootstrapThreadFromIncident(t *testing.T) {
 	}
 }
 
+func TestRunIncidentIngestRefreshesCorrelatedTroubleshootThread(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", troubleshootPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	first := []string{
+		"incident-ingest",
+		"--query", "api availability alert",
+		"--source", "alertmanager",
+		"--severity", "critical",
+		"--summary", "API error rate above threshold",
+		"--label", "cluster=prod-a",
+		"--label", "namespace=prod",
+		"--label", "service=api",
+		"--label", "alertname=APIAvailability",
+	}
+	code, err := Run(first, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("first ingest code=%d err=%v", code, err)
+	}
+
+	stdout.Reset()
+	second := []string{
+		"incident-ingest",
+		"--query", "api latency alert",
+		"--source", "alertmanager",
+		"--severity", "warning",
+		"--summary", "API latency above threshold",
+		"--label", "cluster=prod-a",
+		"--label", "namespace=prod",
+		"--label", "service=api",
+		"--label", "alertname=APIAvailability",
+	}
+	code, err = Run(second, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("second ingest code=%d err=%v", code, err)
+	}
+
+	threadState, err := troubleshoot.LoadState(troubleshootPath)
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if len(threadState.Threads) != 1 {
+		t.Fatalf("len(Threads) = %d, want 1", len(threadState.Threads))
+	}
+	thread, ok := troubleshoot.FindThread(threadState, "api latency alert")
+	if !ok {
+		t.Fatal("expected latest correlated alert query to own the bootstrap thread")
+	}
+	if thread.ActiveFamily != "kubernetes-service" || thread.ActiveTarget != "api" || thread.ActiveNamespace != "prod" {
+		t.Fatalf("thread = %#v", thread)
+	}
+	if _, ok := troubleshoot.FindThread(threadState, "api availability alert"); ok {
+		t.Fatal("expected the old correlated alert query to be replaced")
+	}
+}
+
 func TestRunIncidentObserveMaxSteps(t *testing.T) {
 	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
 	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")

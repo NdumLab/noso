@@ -377,6 +377,8 @@ Incident ingest now also promotes workload labels into incident targeting. If an
 
 Those incident-targeted alerts now also bootstrap the troubleshoot thread directly. If you ingest an alert like `pod=worker-2` in `namespace=prod` and then run `cli-helper troubleshoot "worker pod alert"`, `noso` starts from the seeded `kubectl describe pod -n prod worker-2` probe instead of trying to rediscover the target from the alert text.
 
+When later correlated alerts arrive for the same workload, `noso` now refreshes that troubleshoot thread instead of leaving it stranded under an older alert title. That keeps the active target, namespace, and seeded probe aligned with the newest correlated incident query while preserving the shared troubleshooting context.
+
 `incident-observe` is the first policy-controlled execution surface in `noso`. It only runs explicit, low-risk, read-only probes from the incident’s queued next steps, and it refuses mutation-oriented commands even if they appear in the incident guidance. Today that allowlist covers observation commands such as `systemctl status`, `journalctl -u`, `docker|podman ps`, `docker|podman logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp`.
 
 You can also let it advance through multiple approved probes in one pass:
