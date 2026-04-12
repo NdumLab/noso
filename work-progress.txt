@@ -640,6 +640,26 @@
 - `bash scripts/build.sh`: OK
 - `./bin/cli-helper --help`: OK
 
+## [2026-04-12 19:37] Incident state model and operator commands
+- Added a persistent incident model under `internal/incident` and wired troubleshoot runs to update incident records with status, active target, last probe, likely causes, next steps, and probe history
+- Added `cli-helper incident-status`, `cli-helper incident-history`, and `cli-helper incident-resolve` so operators can inspect or close incidents without editing state files directly
+- Added config support for `incident_state_path` and `NOSO_INCIDENT_STATE_PATH`, updated CLI usage/completion text, and documented the incident workflow in the README
+
+### Validation results
+- `go test ./internal/incident ./internal/config ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+
+## [2026-04-12 19:42] Policy-controlled incident observe execution
+- Added `cli-helper incident-observe --query ...` as the first explicit read-only execution surface for incidents
+- Implemented a low-risk allowlist in `internal/incident/observe.go` so incidents can advance with approved probes like `systemctl status`, `journalctl -u`, `docker|podman ps/logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp` while refusing mutating commands
+- Wired incident observe back into troubleshoot and incident state so successful probe execution updates likely causes, findings, next steps, and probe history rather than producing a one-off output
+- Updated README and CLI usage text to document the new execution policy
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+- `go build ./...`: pending full pass
+
 ## [2026-04-12 17:18] Make Kubernetes log probes container-aware
 - Updated the live Kubernetes evidence loop to carry the discovered `container_hint` into both `kubectl logs` execution and rendered `kubectl logs` follow-up steps
 - Added a shared Kubernetes log command builder so namespaced and multi-container log probes stay consistent across describe and get-pods evidence flows
