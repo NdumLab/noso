@@ -13,6 +13,7 @@ func TestRenderResponseText(t *testing.T) {
 		IntentID:       "inspect_port_listener",
 		Command:        "ss -ltnp | grep :8080",
 		Explanation:    "Inspect listeners on TCP port 8080.",
+		Findings:       []string{"Port 8080 is currently bound by nginx."},
 		ExpectedOutput: "A matching process and PID if the port is in use.",
 		Risk:           "Low",
 		Confidence:     "High",
@@ -24,7 +25,7 @@ func TestRenderResponseText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderResponse() error = %v", err)
 	}
-	for _, token := range []string{"Command:", "Risk: Low", "Confidence: High", "Next step:"} {
+	for _, token := range []string{"Command:", "Findings:", "Risk: Low", "Confidence: High", "Next step:"} {
 		if !strings.Contains(rendered, token) {
 			t.Fatalf("rendered output missing %q", token)
 		}
@@ -33,12 +34,12 @@ func TestRenderResponseText(t *testing.T) {
 
 func TestRenderResponseQuietSuppressesWarnings(t *testing.T) {
 	response := models.Response{
-		IntentID:    "test",
-		Command:     "df -h",
-		Risk:        "Low",
-		Confidence:  "High",
-		NextSteps:   []string{"next step here"},
-		Warnings:    []string{"a warning"},
+		IntentID:   "test",
+		Command:    "df -h",
+		Risk:       "Low",
+		Confidence: "High",
+		NextSteps:  []string{"next step here"},
+		Warnings:   []string{"a warning"},
 	}
 	rendered, err := RenderResponse(response, false, true)
 	if err != nil {
@@ -54,9 +55,9 @@ func TestRenderResponseQuietSuppressesWarnings(t *testing.T) {
 
 func TestRenderResponseJSON(t *testing.T) {
 	response := models.Response{
-		IntentID:  "test_json",
-		Command:   "df -h",
-		Risk:      "Low",
+		IntentID:   "test_json",
+		Command:    "df -h",
+		Risk:       "Low",
 		Confidence: "High",
 	}
 	rendered, err := RenderResponse(response, true, false)

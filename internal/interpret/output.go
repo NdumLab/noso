@@ -21,12 +21,20 @@ func Output(command string, text string) (models.Response, error) {
 	switch {
 	case strings.HasPrefix(lower, "systemctl status"):
 		return interpretSystemctlStatus(command, text), nil
+	case strings.HasPrefix(lower, "docker ps"), strings.HasPrefix(lower, "podman ps"):
+		return interpretRuntimePS(command, text), nil
+	case strings.HasPrefix(lower, "docker logs"), strings.HasPrefix(lower, "podman logs"):
+		return interpretRuntimeLogs(command, text), nil
 	case strings.HasPrefix(lower, "df "):
 		return interpretDF(command, text), nil
 	case strings.HasPrefix(lower, "free "):
 		return interpretFree(command, text), nil
 	case strings.HasPrefix(lower, "kubectl get pods"):
 		return interpretKubectlGetPods(command, text), nil
+	case strings.HasPrefix(lower, "kubectl describe pod"):
+		return interpretKubectlDescribePod(command, text), nil
+	case strings.HasPrefix(lower, "kubectl logs"):
+		return interpretKubectlLogs(command, text), nil
 	case strings.HasPrefix(lower, "journalctl"):
 		return interpretJournalctl(command, text), nil
 	case strings.HasPrefix(lower, "ps "):
@@ -53,6 +61,13 @@ func interpretSystemctlStatus(command string, text string) models.Response {
 	response.ExpectedOutput = "A summary of unit health, failure signals, and the next safe diagnostics to run."
 
 	switch {
+	case strings.Contains(lower, "could not be found"), strings.Contains(lower, "loaded: not-found"):
+		response.Explanation = "The requested unit could not be found on this host. That usually means the service name is wrong, the unit file is absent, or the workload is not managed by systemd."
+		response.Confidence = "High"
+		response.NextSteps = []string{
+			"Confirm the service name with `systemctl list-units --type=service | grep <name>`.",
+			"If the workload is containerized, inspect the runtime instead of systemd.",
+		}
 	case strings.Contains(lower, "active: failed"):
 		response.Explanation = "The unit is in a failed state. systemd recorded a service failure rather than a healthy running process."
 		response.Confidence = "High"
@@ -229,6 +244,101 @@ func interpretKubectlGetPods(command string, text string) models.Response {
 	return response
 }
 
+func interpretKubectlDescribePod(command string, text string) models.Response {
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_kubectl_describe_pod"
+	response.ExpectedOutput = "A summary of pod state, container failure signals, and the next safe Kubernetes diagnostics."
+
+	lower := strings.ToLower(text)
+	var signals []string
+	for _, marker := range []struct {
+		needle string
+		label  string
+	}{
+		{"crashloopbackoff", "CrashLoopBackOff detected"},
+		{"imagepullbackoff", "ImagePullBackOff detected"},
+		{"errimagepull", "ErrImagePull detected"},
+		{"oomkilled", "OOMKilled container state detected"},
+		{"failedmount", "volume mount failure detected"},
+		{"failedscheduling", "scheduler failure detected"},
+		{"reason: pending", "pending pod state detected"},
+	} {
+		if strings.Contains(lower, marker.needle) {
+			signals = append(signals, marker.label)
+		}
+	}
+
+	if len(signals) == 0 {
+		response.Explanation = "The pasted pod description was recognized, but no common failure markers were detected in the current text."
+		response.Confidence = "Medium"
+		response.NextSteps = []string{
+			"Inspect the Events section for scheduler, image-pull, or mount failures.",
+			"Run `kubectl logs <pod> --tail=100` if the pod starts and emits container logs.",
+		}
+		return response
+	}
+
+	response.Explanation = "The pasted pod description contains failure signals: " + strings.Join(signals, "; ") + "."
+	response.Confidence = "High"
+	response.NextSteps = []string{
+		"Review the Events section around the first failure signal.",
+		"Run `kubectl logs <pod> --tail=100` for container-level errors if the pod started at least once.",
+	}
+	return response
+}
+
+func interpretKubectlLogs(command string, text string) models.Response {
+	response := interpretGenericLogs(command, text)
+	response.IntentID = "interpret_kubectl_logs"
+	response.ExpectedOutput = "A summary of application-level error signals from pod logs."
+	return response
+}
+
+func interpretRuntimePS(command string, text string) models.Response {
+	response := baseInterpretResponse(command)
+	response.IntentID = "interpret_runtime_ps"
+	response.ExpectedOutput = "A summary of container runtime state, especially exited, restarting, or unhealthy containers."
+
+	lower := strings.ToLower(text)
+	var unhealthy []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(strings.ToLower(trimmed), "container id") || strings.HasPrefix(strings.ToLower(trimmed), "con_id") {
+			continue
+		}
+		if strings.Contains(strings.ToLower(trimmed), "exited") ||
+			strings.Contains(strings.ToLower(trimmed), "restarting") ||
+			strings.Contains(strings.ToLower(trimmed), "created") ||
+			strings.Contains(strings.ToLower(trimmed), "unhealthy") {
+			unhealthy = append(unhealthy, trimmed)
+		}
+	}
+
+	switch {
+	case len(unhealthy) > 0:
+		response.Explanation = "The runtime container list shows non-running or unhealthy containers."
+		response.Confidence = "High"
+		response.NextSteps = []string{
+			"Identify the affected container row and inspect recent logs for the same container.",
+			"Review restart counts, exit status, and image configuration before restarting anything.",
+		}
+	case strings.Contains(lower, "up "):
+		response.Explanation = "The runtime container list shows running containers and no obvious exited or restarting states in the pasted output."
+		response.Confidence = "Medium"
+	default:
+		response.Explanation = "The pasted runtime output was recognized, but no clear container state could be classified from it."
+		response.Confidence = "Low"
+	}
+	return response
+}
+
+func interpretRuntimeLogs(command string, text string) models.Response {
+	response := interpretGenericLogs(command, text)
+	response.IntentID = "interpret_runtime_logs"
+	response.ExpectedOutput = "A summary of application-level error signals from container logs."
+	return response
+}
+
 func baseInterpretResponse(command string) models.Response {
 	return models.Response{
 		Command:    command,
@@ -279,10 +389,14 @@ func appendUnique(values []string, value string) []string {
 }
 
 func interpretJournalctl(command string, text string) models.Response {
-	response := baseInterpretResponse(command)
+	response := interpretGenericLogs(command, text)
 	response.IntentID = "interpret_journalctl"
 	response.ExpectedOutput = "A summary of error signals, failure patterns, and the next safe diagnostics."
+	return response
+}
 
+func interpretGenericLogs(command string, text string) models.Response {
+	response := baseInterpretResponse(command)
 	lower := strings.ToLower(text)
 	var signals []string
 
@@ -307,20 +421,20 @@ func interpretJournalctl(command string, text string) models.Response {
 
 	if len(signals) == 0 {
 		if strings.TrimSpace(text) == "" {
-			response.Explanation = "The pasted journalctl output appears empty. The unit may have no journal entries yet, or the time window returned no records."
+			response.Explanation = "The pasted log output appears empty. The process may have no recent entries yet, or the selected window returned no records."
 			response.Confidence = "Low"
 		} else {
-			response.Explanation = "No obvious failure signals were found in the pasted journal output. The lines do not contain common error keywords."
+			response.Explanation = "No obvious failure signals were found in the pasted log output. The lines do not contain common error keywords."
 			response.Confidence = "Medium"
 			response.NextSteps = []string{
 				"Scan the output manually for unusual state transitions or unexpected restarts.",
-				"Widen the time window with `journalctl -u <service> --since today`.",
+				"Widen the log window or fetch more lines if the failure is intermittent.",
 			}
 		}
 		return response
 	}
 
-	response.Explanation = fmt.Sprintf("The pasted journal output contains %d signal(s): %s.",
+	response.Explanation = fmt.Sprintf("The pasted log output contains %d signal(s): %s.",
 		len(signals), strings.Join(signals, "; "))
 	response.Confidence = "High"
 	response.NextSteps = []string{

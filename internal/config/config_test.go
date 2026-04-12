@@ -10,6 +10,11 @@ func TestLoadUsesEnvOverrides(t *testing.T) {
 	t.Setenv("NOSO_MODE", "local-preferred")
 	t.Setenv("NOSO_AUDIT_LOG_PATH", filepath.Join(t.TempDir(), "audit.log"))
 	t.Setenv("NOSO_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("NOSO_LLM_ENABLED", "true")
+	t.Setenv("NOSO_LLM_ENDPOINT", "http://127.0.0.1:15321/v1/interpret")
+	t.Setenv("NOSO_LLM_TIMEOUT_MS", "2500")
+	t.Setenv("NOSO_LLM_LOG_PATH", filepath.Join(t.TempDir(), "noso-llm.jsonl"))
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", filepath.Join(t.TempDir(), "troubleshoot-state.json"))
 
 	cfg, err := Load()
 	if err != nil {
@@ -21,6 +26,18 @@ func TestLoadUsesEnvOverrides(t *testing.T) {
 	}
 	if cfg.AuditLogPath == "" {
 		t.Fatal("AuditLogPath should not be empty")
+	}
+	if !cfg.LLMEnabled {
+		t.Fatal("LLMEnabled = false, want true")
+	}
+	if cfg.LLMTimeoutMS != 2500 {
+		t.Fatalf("LLMTimeoutMS = %d, want 2500", cfg.LLMTimeoutMS)
+	}
+	if cfg.LLMLogPath == "" {
+		t.Fatal("LLMLogPath should not be empty")
+	}
+	if cfg.TroubleshootStatePath == "" {
+		t.Fatal("TroubleshootStatePath should not be empty")
 	}
 }
 
@@ -105,5 +122,27 @@ func TestDefaultAuditLogPathFallsBackWhenHomeStateIsNotWritable(t *testing.T) {
 	want := filepath.Join(os.TempDir(), "noso", "audit.log")
 	if path != want {
 		t.Fatalf("defaultAuditLogPath() = %q, want %q", path, want)
+	}
+}
+
+func TestValidateRejectsInvalidLLMEndpoint(t *testing.T) {
+	cfg := Config{
+		Mode:         "strict-local",
+		AuditLogPath: "/tmp/test.log",
+		LLMEnabled:   true,
+		LLMEndpoint:  "://bad",
+		LLMTimeoutMS: 1000,
+	}
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("Validate() with invalid llm endpoint should fail")
+	}
+}
+
+func TestLoadRejectsInvalidLLMTimeout(t *testing.T) {
+	t.Setenv("NOSO_CONFIG", filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("NOSO_LLM_ENABLED", "true")
+	t.Setenv("NOSO_LLM_TIMEOUT_MS", "abc")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() with invalid NOSO_LLM_TIMEOUT_MS should fail")
 	}
 }

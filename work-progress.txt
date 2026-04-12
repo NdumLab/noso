@@ -1,0 +1,776 @@
+
+##Examples##
+## [2026-04-10 14:05] Initialized project guidance files
+- Confirmed presence of AGENTS.md, README.txt, .codex/config.toml, and work-progress.txt
+- Verified project scope is plain-English CLI assistant on RHEL 9
+- Reason
+
+## [2026-04-10 14:18] Updated planning language
+- Replaced month-based roadmap wording with phase-based wording
+- Confirmed Phase1 / Phase2 / Phase3 naming direction
+- Reason
+
+## [2026-04-10 14:35] Next target
+- Scaffold Go CLI project
+- Add base command structure
+- Implement environment detection
+- Reason
+
+## [2026-04-10 16:49] Phase1 milestone plan
+- Reviewed AGENTS.md, README.txt, and current repo state; confirmed repository is documentation-only and Phase1 remains the active scope
+- Plan: scaffold Go foundation, implement CLI/config/detection/evidence/intent/rendering/audit modules, then validate build/tests/help flows where local tooling allows
+- Result: ready to start first small Phase1 implementation increment
+
+## [2026-04-10 16:57] Scaffolded Phase1 foundation code
+- Added Go module, CLI entrypoint, config loader, RHEL 9 environment detection, command evidence collector, starter intent registry, response renderer, audit logger, and unit test skeletons
+- Validation pending next: run build, tests, and basic CLI/help checks; diagnose any failures before further changes
+
+## [2026-04-10 16:59] Corrected pre-validation source issue
+- Removed an unused environment parameter in the intent resolver during source review to avoid a likely Go compile failure
+- Next step: run build, test, and CLI validation commands and capture any remaining blockers
+
+## [2026-04-10 17:02] Build and test validation attempt
+- Ran `command -v go`, `go build ./...`, and `go test ./...`
+- Result: validation failed because the host does not have the Go toolchain installed (`go: command not found`)
+- Next step: keep the code ready for build/test on a Go-enabled host or after Go is installed
+
+## [2026-04-10 17:03] Local evidence validation on RHEL 9.7
+- Verified target host is Red Hat Enterprise Linux 9.7 and confirmed presence of Phase1 commands: `systemctl`, `ss`, `du`, `find`, and `bash`
+- Captured local help output snippets from `systemctl --help`, `ss --help`, `du --help`, and `find --help` to confirm the evidence-collection approach matches the real system
+- Result: host-level Phase1 command assumptions validated; build/test/CLI execution remains blocked only by missing `go`
+
+## [2026-04-10 17:07] Bootstrapped local Go toolchain
+- Downloaded Go 1.26.2 from `go.dev` and unpacked it under `/opt/noso/.tools/go` so validation could run without root privileges
+- Build cache defaults were blocked by the sandbox, so validation was switched to writable local cache paths under `/opt/noso/.cache`
+- Result: `go build ./...` became runnable in the project workspace
+
+## [2026-04-10 17:08] Diagnosed first real test failure
+- Ran `go build ./...` successfully with local cache overrides
+- Ran `go test ./...`; result failed in `internal/registry` because the large-file intent regex did not match lowercased size suffixes from normalized queries
+- Next step: fix the regex and rerun tests plus basic CLI validation
+
+## [2026-04-10 17:10] Fixed failing intent test
+- Updated the large-file intent matcher to accept normalized lowercase size suffixes so parsed requests preserve sizes like `2G`
+- Result: parser bug fixed and ready for rerun of the full validation cycle
+
+## [2026-04-10 17:11] Completed Phase1 foundation validation
+- Ran `go test ./...` successfully using the local Go toolchain and writable local Go cache paths
+- Built the CLI successfully and validated `-h`, `env`, and a sample query: `what process is using port 8080`
+- Verified audit logging writes JSON lines to `/opt/noso/.cache/noso-audit.log`
+- Result: first Phase1 foundation milestone is complete and builds cleanly in this workspace with the local toolchain bootstrap
+
+## [2026-04-10 17:15] Next Phase1 increment plan
+- Extend the starter intent registry with more read-only Linux workflows covering logs, package inspection, text search, and safe Git status checks
+- Add a small centralized risk helper so response risk labels stay modular and consistent as Phase1 grows
+- Validate with unit tests plus CLI help and sample query flows after the code changes
+
+## [2026-04-10 17:18] Expanded Phase1 starter intents
+- Added read-only intent coverage for service logs, package inspection, recursive text search, and safe Git status, plus a small centralized risk classifier in `internal/safety`
+- Added registry tests for package inspection, text search, and Git status intent resolution
+- Result: code update complete and ready for validation
+
+## [2026-04-10 17:19] Validated expanded Phase1 coverage
+- Ran `go build ./...` and `go test ./...` successfully with the local Go toolchain and workspace-local Go caches
+- Validated CLI queries for `package info for bash` and `show git status`; package inspection returned high-confidence RPM guidance and Git status returned a low-confidence warning because `git` is not installed on this host
+- Result: second Phase1 increment passed build, tests, and basic CLI validation without widening scope beyond Phase1
+
+## [2026-04-10 17:22] Containerd planning update
+- Add explicit future support for `containerd` to the project docs and extend local environment discovery to detect containerd-related commands without adding non-Phase1 troubleshooting flows yet
+- Validate that the project still builds and that environment reporting continues to work after the detection change
+
+## [2026-04-10 17:24] Added containerd roadmap and detection hooks
+- Updated project docs so future domain planning now explicitly includes `containerd` alongside Docker and Kubernetes
+- Extended local command discovery and `env` rendering to report `containerd`, `ctr`, `crictl`, and `nerdctl` availability without changing the current Phase1 intent scope
+- Result: code and documentation update complete and ready for validation
+
+## [2026-04-10 17:25] Validated containerd-related changes
+- Ran `go build ./...` and `go test ./...` successfully with the local Go toolchain and workspace-local Go caches
+- Built the CLI and validated `env`; result correctly reports `containerd`, `ctr`, `crictl`, and `nerdctl` as missing on this RHEL 9.7 host
+- Result: containerd is now explicitly planned and detectable, while Phase1 remains limited to safe local Linux workflows
+
+## [2026-04-10 17:28] Next Phase1 increment plan
+- Add read-only containerd inspection intents for service status, recent logs, and client/server version checks using existing systemd and local evidence foundations
+- Keep scope limited to safe command guidance only; no container runtime execution or remediation flows
+- Validate with unit tests plus sample CLI queries after the code changes
+
+## [2026-04-10 17:31] Added read-only containerd intents
+- Added containerd status, recent log, and version intent handling using `systemctl`, `journalctl`, and first-available containerd tooling checks
+- Added registry tests covering containerd status, logs, and version intent resolution
+- Result: implementation complete; validation found one duplicate-warning output issue to clean up next
+
+## [2026-04-10 17:34] Validated containerd inspection intents
+- Ran `go build ./...` and `go test ./...` successfully after adding the containerd intent pack
+- Validated CLI queries for `containerd status` and `containerd version`; both returned read-only guidance and correctly warned that containerd is not installed on this host
+- Fixed a duplicate-warning issue in the version response and revalidated the query output
+- Result: containerd now has basic safe inspection support without expanding into non-Phase1 remediation flows
+
+## [2026-04-10 17:40] Final Phase1 completion plan
+- Finish Stage 2 to Stage 4 scope in a bounded way by adding broader Linux/file/process/network/Git inspection intents, a basic explain engine for in-scope commands, and starter troubleshooting templates for common service, network, and disk problems
+- Keep all new guidance read-only-first and risk-labeled; do not add auto-execution or unsafe remediation behavior
+- Validate with full build/test runs plus representative CLI flows before marking Phase1 complete
+
+## [2026-04-10 17:46] Validation failure after Phase1 expansion
+- Ran `go build ./...` successfully after adding explain and troubleshoot support plus broader intent coverage
+- Ran `go test ./...`; result failed in `internal/registry` because an older test still expected `explain git rebase` to be unsupported after explain mode was added
+- Next step: update the stale expectation and refactor the oversized registry file into smaller intent-focused files before rerunning validation
+
+## [2026-04-10 17:52] Refactored registry layout
+- Split the oversized registry implementation into focused files for dispatch, Linux intents, Git intents, containerd intents, and shared helpers
+- Updated the stale explain-mode test expectation to match the new supported behavior
+- Result: registry structure is modular again and ready for final validation
+
+## [2026-04-10 17:54] Final Phase1 validation
+- Ran `go build ./...` and `go test ./...` successfully after the registry refactor
+- Validated CLI flows for ask mode (`show disk free space`), explain mode (`explain git reset --hard HEAD~1`), troubleshoot mode (`nginx is not starting`), Git inspection (`show git log`), and `env`
+- Result: all core Phase1 modes now execute successfully in the local workspace with risk labels, expected output guidance, local evidence reporting, and audit logging
+
+## [2026-04-10 17:55] Documentation alignment and Phase1 complete
+- Updated README.txt to document the currently implemented Phase1 coverage and example supported queries
+- Result: repository docs, code, tests, and validation evidence are aligned; Phase1 is complete
+
+## [2026-04-10 18:02] Phase2 Milestone 1 plan
+- Start Phase2 with container runtime foundation work: extend local detection for Docker and Podman alongside existing containerd discovery, add read-only inspection intents, and add starter troubleshooting flows for unhealthy containers, failed starts, and image pull issues
+- Keep all new guidance inspection-first and risk-labeled with no auto-execution or remediation behavior
+- Validate with build, tests, and representative CLI queries before moving to Kubernetes or other Phase2 domains
+
+## [2026-04-10 18:08] Phase2 runtime validation failure
+- Ran `go build ./...` successfully after adding Docker and Podman runtime inspection intents plus runtime troubleshooting starters
+- Ran `go test ./...`; result failed in `internal/registry` because the runtime log intent parser treated the container name as the runtime for queries like `podman logs web`
+- Next step: fix the query parsing bug and rerun build, tests, and representative CLI queries
+
+## [2026-04-10 18:11] Completed Phase2 Milestone 1 runtime foundation
+- Extended runtime detection and environment reporting for Docker and Podman alongside existing containerd tooling
+- Added read-only runtime inspection intents for status, version, containers, images, logs, and inspect-style metadata, plus starter troubleshooting for unhealthy containers, failed starts, and image pull failures
+- Fixed the runtime log parsing bug found during validation and reran the full build and test cycle successfully
+- Validated CLI queries for `docker status`, `docker container unhealthy`, `podman logs web`, and `list docker images`
+- Result: Phase2 has started cleanly with a working container runtime foundation and validated read-only troubleshooting guidance
+
+## [2026-04-10 18:18] Completed Phase2 Milestone 2 Kubernetes foundation
+- Added `kubectl` detection, kubeconfig path reporting, and current-context discovery hooks to the environment model and `env` output
+- Added read-only Kubernetes intents for client version, current context, pods, deployments, services, namespaces, pod logs, pod describe output, and events
+- Added starter troubleshooting for CrashLoopBackOff, ImagePullBackOff, and Pending pods with read-only-first next steps
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `show pods in namespace kube-system`, `pod in CrashLoopBackOff`, `show kubernetes context`, and `env`
+- Result: Kubernetes foundation support is now in place and Phase2 has a validated runtime-plus-cluster inspection base
+
+## [2026-04-10 18:25] Phase2 Milestone 4 plan
+- Add Terraform foundation support with `terraform` detection and local-only, dry-run-first intents for version, fmt-check, validate, plan, workspace listing, and state listing
+- Keep this milestone limited to inspection and validation workflows; do not add apply, destroy, or state mutation guidance by default
+- Validate with build, tests, and representative CLI queries before moving to Ansible or stronger SSH workflows
+
+## [2026-04-10 18:29] Completed Phase2 Milestone 3 Helm foundation
+- Added `helm` detection plus read-only and dry-run-first intents for version, repo listing, release listing, release status, release history, values inspection, and local template rendering
+- Extended explain coverage for core Helm inspection commands and updated README.txt with the Helm milestone scope
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `list helm repos`, `show helm status for release api in namespace prod`, `preview helm template for chart ingress-nginx`, and `env`
+- Result: Helm foundation support is now in place with safe inspection and preview guidance
+
+## [2026-04-10 18:34] Completed Phase2 Milestone 4 Terraform foundation
+- Added `terraform` detection plus local-only, dry-run-first intents for version, fmt-check, validate, plan, workspace listing, and state listing
+- Extended explain coverage for core Terraform validation and preview commands and updated the safety model so `terraform plan` is labeled Medium risk
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `validate terraform`, `preview terraform plan`, `list terraform workspaces`, and `env`
+- Result: Terraform foundation support is now in place with validation and preview workflows while keeping apply and destroy out of scope
+
+## [2026-04-10 18:42] Completed Phase2 Milestone 5 Ansible foundation
+- Added `ansible` and `ansible-playbook` detection plus safe intents for version, inventory inspection, playbook syntax-check, and playbook check mode
+- Extended explain coverage for core Ansible inspection and preview commands and updated the safety model so `ansible-playbook --check` is labeled Medium risk
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `ansible version`, `syntax check playbook site.yml`, `dry run ansible playbook deploy.yml`, and `env`
+- Result: Ansible foundation support is now in place with inspection-first and dry-run-first guidance while normal playbook execution remains out of scope
+
+## [2026-04-10 18:46] Phase2 Milestone 6 plan
+- Add stronger SSH and remote workflow support with safe intents for SSH version and connectivity checks, host-key inspection, SCP preview guidance, and rsync dry-run guidance
+- Keep this milestone focused on remote inspection and transfer preview workflows; do not add broad remote command execution or unattended mutation guidance by default
+- Validate with build, tests, and representative CLI queries before assessing overall Phase2 completion
+
+## [2026-04-10 18:50] Phase2 remote workflow validation failure
+- Ran `go build ./...` and `go test ./...` successfully after adding SSH and remote preview support
+- Validation query `show ssh host key for host app1` exposed a host-parsing bug that incorrectly selected `key` instead of the requested hostname
+- Next step: fix host extraction, add a regression test, and rerun the targeted CLI validation
+
+## [2026-04-10 18:53] Refined remote host extraction fix
+- Corrected the host extractor so `for host <name>` takes priority over the earlier `host key` phrase in SSH host-key queries
+- Regression test already covers the intended `show ssh host key for host app1` parsing shape
+- Next step: rebuild the CLI and rerun the targeted host-key validation before logging the milestone
+
+## [2026-04-10 18:56] Completed Phase2 Milestone 6 SSH and remote workflows
+- Added SSH and remote workflow support with intents for SSH client version, effective SSH config inspection, SSH host-key review, SSH port reachability checks, rsync dry-run previews, and safer SCP-style preview guidance
+- Extended explain coverage for core SSH and rsync preview commands and updated the environment report to surface `ssh`, `scp`, `rsync`, `ssh-keyscan`, and `nc`
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `show ssh config for host app1`, `copy ./dist/ to user@host:/srv/app/`, `show ssh host key for host app1`, and `env`
+- Result: stronger SSH and remote workflow support is now in place with inspection-first and dry-run-first guidance
+
+## [2026-04-10 18:57] Phase2 complete
+- Phase2 roadmap slices now implemented and validated for container runtimes, Kubernetes foundations, Helm, Terraform, Ansible, and stronger SSH or remote workflows
+- Result: Phase2 scope from the README is complete; the next decision point is whether to open Phase3 or refine current Phase2 coverage depth
+
+## [2026-04-10 19:04] Post-review fix plan
+- Fix three review findings: correct SSH config risk labeling, improve SSH connectivity host extraction so natural-language queries target the intended host, and only report kubeconfig paths when they actually exist
+- Revalidate with build, tests, and targeted CLI queries for SSH config, SSH connectivity, and environment reporting before closing the fixes
+
+## [2026-04-10 19:08] Completed post-review fixes
+- Removed the incorrect Medium-risk classification for read-only `ssh -G` config inspection
+- Fixed SSH connectivity host parsing so queries like `check ssh connectivity to app1` now target the requested host and added a regression test
+- Updated kubeconfig detection so `env` only reports a kubeconfig path when the file actually exists
+- Ran `go build ./...` and `go test ./...` successfully and validated `show ssh config for host app1`, `check ssh connectivity to app1`, and `env`
+- Result: all three review findings were fixed and revalidated
+
+## [2026-04-10 19:13] Phase3 Milestone 1 plan
+- Start Phase3 with cloud CLI foundations for AWS, Azure, and GCP using safe inspection-first workflows: detect `aws`, `az`, and `gcloud`, surface them in environment reporting, and add read-only intents for CLI version, current identity, current project or subscription context, and configured profiles or accounts
+- Keep this milestone limited to cloud identity and config visibility; do not add create, deploy, delete, or apply-style cloud actions by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 19:18] Phase3 cloud milestone review findings
+- Review found no user-visible parser or safety-label issues in the new AWS, Azure, and GCP identity or context flows
+- Review did find missing dispatch test coverage for cloud version, AWS profiles, and Azure subscriptions queries
+- Next step: add the missing tests and rerun build, tests, and targeted CLI validations before closing the milestone
+
+## [2026-04-10 19:21] Completed Phase3 Milestone 1 cloud CLI foundations
+- Added read-only AWS, Azure, and GCP intents for CLI version, current identity or account context, and local profiles or subscriptions where applicable
+- Completed the milestone review by adding missing dispatch tests for version, AWS profiles, and Azure subscriptions; no user-visible parser or safety-label issues were found
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `show aws identity`, `list aws profiles`, `show azure account`, `list azure subscriptions`, `show gcloud project`, and `env`
+- Result: cloud CLI foundation support is complete and validated for the first Phase3 slice
+
+## [2026-04-10 19:22] Phase3 Milestone 2 plan
+- Add Argo CD foundation support with `argocd` detection plus read-only intents for CLI version, current account or context, application listing, application get output, project listing, and cluster listing
+- Keep this milestone limited to inspection-first GitOps visibility; do not add sync, app set, delete, or rollback guidance by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 19:26] Phase3 Argo CD milestone review findings
+- Review found no user-visible parser or safety-label issues in the new Argo CD inspection flows
+- Review did find missing dispatch test coverage for Argo CD version, account, project, and cluster queries
+- Next step: add the missing tests and rerun build, tests, and targeted CLI validations before closing the milestone
+
+## [2026-04-10 19:29] Completed Phase3 Milestone 2 Argo CD foundations
+- Added `argocd` detection plus read-only intents for CLI version, current account, application listing, application get output, project listing, and cluster listing
+- Completed the milestone review by adding missing dispatch tests for version, account, project, and cluster queries; no user-visible parser or safety-label issues were found
+- Ran `go build ./...` and `go test ./...` successfully and validated CLI queries for `list argocd apps`, `show argocd app payments`, `list argocd clusters`, and `env`
+- Result: Argo CD foundation support is complete and validated for the second Phase3 slice
+
+## [2026-04-10 19:30] Phase3 Milestone 3 plan
+- Add security and compliance tooling foundations with safe intents for SELinux status, firewall status or rules, OpenSSL certificate inspection, and basic security context visibility using locally available tooling
+- Keep this milestone inspection-first and avoid enforcement or mutation commands such as changing SELinux mode or firewall rules by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 19:44] Phase3 security milestone review findings
+- Review found one user-visible issue outside the new intent logic: every `ask` response emitted an audit-log warning because the default audit path resolved into an unwritable home-state directory in this environment
+- Review also found missing dispatch coverage for `show selinux status` and `show firewall zones`; parser and safety labeling for the new security intents were otherwise correct
+- Next step: fix the audit log fallback path, add the missing tests, then rerun build, tests, and targeted CLI validations before closing the milestone
+
+## [2026-04-10 19:47] Completed Phase3 Milestone 3 security and compliance foundations
+- Added safe security and compliance intents for SELinux mode and status inspection, firewalld rule and active-zone inspection, and OpenSSL certificate decoding
+- Fixed the user-visible audit logging warning by falling back to a writable default audit path and added missing dispatch tests for SELinux status and firewall zones
+- Ran `go build ./...` and `go test ./...` successfully and validated `show selinux mode`, `show selinux status`, `show firewall rules`, `show firewall zones`, `inspect certificate /opt/noso/.cache/testdata/test.crt`, and `env`
+- Result: Phase3 security and compliance foundations are complete and validated with clean user-visible output
+
+## [2026-04-10 19:48] Phase3 Milestone 4 plan
+- Add hardware diagnostics and GPU or AI infrastructure foundations with safe inspection-first support for CPU, memory, block devices, firmware or system identity, disk health tooling when present, and NVIDIA GPU visibility when available
+- Keep this milestone read-only and avoid any tuning, firmware changes, disk mutation, or GPU state changes by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 19:56] Phase3 hardware milestone review findings
+- Review found no user-visible parser or safety-label issues in the new hardware and GPU inspection flows during live CLI validation
+- Review did find missing dispatch regression coverage for the IPMI inspection route; CPU, memory, block-device, system-hardware, disk-health, and GPU routes were already covered
+- Next step: add the missing IPMI test and rerun build and test validation before closing the milestone
+
+## [2026-04-10 19:58] Completed Phase3 Milestone 4 hardware and GPU diagnostics foundations
+- Added safe hardware and GPU inspection intents for CPU details, memory usage, block devices, SMBIOS system identity, SMART disk health, IPMI controller info, and NVIDIA GPU status
+- Surfaced `lscpu`, `free`, `lsblk`, `dmidecode`, `smartctl`, `ipmitool`, and `nvidia-smi` in environment detection and explain mode, and completed the milestone review by adding the missing IPMI dispatch test
+- Ran `go build ./...` and `go test ./...` successfully and validated `show cpu info`, `show memory usage`, `list disks`, `show hardware info`, `check disk health for /dev/nvme0n1`, `show gpu status`, and `env`
+- Result: Phase3 hardware diagnostics and GPU or AI infrastructure foundations are complete and validated
+
+## [2026-04-10 19:59] Phase3 Milestone 5 plan
+- Add database CLI foundations with safe inspection-first support for PostgreSQL, MySQL, and Redis client visibility plus read-only connection, version, database listing, and health or ping style checks where the local CLI supports them
+- Keep this milestone read-only and avoid schema mutation, data writes, flushes, or destructive administrative commands by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 20:05] Phase3 database milestone review findings
+- Review found no user-visible parser, safety-label, or coverage issues in the PostgreSQL, MySQL, and Redis inspection routes
+- The new database intents degraded cleanly on this host by warning about missing CLIs without producing incorrect commands or risky guidance
+- Next step: log the final validated result for the milestone and close Phase3
+
+## [2026-04-10 20:06] Completed Phase3 Milestone 5 database CLI foundations
+- Added safe database CLI intents for PostgreSQL version and database listing, MySQL version and database listing, and Redis version and ping or health checks
+- Surfaced `psql`, `mysql`, and `redis-cli` in environment detection and explain mode and completed the milestone review with no further fixes required
+- Ran `go build ./...` and `go test ./...` successfully and validated `show postgres version`, `list postgres databases`, `show mysql version`, `check redis health`, and `env`
+- Result: Phase3 database CLI foundations are complete and validated
+
+## [2026-04-10 20:06] Phase3 complete
+- Phase3 roadmap slices are now implemented and validated for cloud CLIs, Argo CD, security and compliance tooling, hardware and GPU diagnostics, and database CLI foundations
+- Each milestone included implementation, code review for user-visible behavior and parser or safety issues, any required fixes, rerun build and test validation, and updated documentation and progress logging
+- Result: Phase3 scope from the README is complete
+
+## [2026-04-10 20:12] Phase4 Milestone 1 plan
+- Start Phase4 with output interpretation foundations instead of adding more domains: add an `interpret` CLI mode that accepts pasted command output and explains what it means for a small set of high-value operational commands
+- Target the first interpreter set at `systemctl status`, `df -h`, `free -h`, and `kubectl get pods`, keeping the feature read-only and focused on summary plus next safe checks
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 20:24] Phase4 interpret milestone review findings
+- Review found one parser issue in the new `interpret` mode: `free -h` outputs using IEC units such as `Gi` and `Mi` were not parsed correctly, which caused low-confidence generic output instead of memory-pressure analysis
+- Review also exposed a validation mistake on the first pass because an old binary was exercised before the refreshed build completed; after rerunning sequentially, the new subcommand paths validated correctly
+- Next step: fix IEC unit parsing, add direct regression coverage for human-size parsing, then rerun build, tests, and targeted CLI validations before closing the milestone
+
+## [2026-04-10 20:27] Completed Phase4 Milestone 1 output interpretation foundations
+- Added an `interpret` CLI mode for pasted output with dedicated interpreters for `systemctl status`, `df -h`, `free -h`, and `kubectl get pods`
+- Fixed IEC unit parsing for `free -h`, added direct interpreter and CLI coverage, and kept the feature read-only with summary-focused next safe checks
+- Ran `go build ./...` and `go test ./...` successfully and validated `interpret --command 'df -h'`, `interpret --command 'free -h'`, `interpret --command 'systemctl status nginx'`, and `interpret --command 'kubectl get pods -n prod'`
+- Result: Phase4 output interpretation foundations are complete and validated
+
+## [2026-04-10 20:28] Phase4 Milestone 2 plan
+- Add a `doctor` mode for local product self-checks so operators can quickly see whether the host is a supported environment and which local dependencies limit coverage
+- Check config loading, audit-log path usability, target-platform fit, and core or extended tool availability, then summarize findings with safe next actions
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 20:34] Phase4 doctor milestone review findings
+- Review found no user-visible parser or safety-label issues in the new `doctor` mode on this host; the output correctly reported RHEL 9 fit, writable audit logging, and the missing `git` core dependency
+- Review did find missing test coverage for the non-RHEL warning path, so that case was added before closing the milestone
+- Next step: rerun build and test validation, then log the final validated result for the milestone
+
+## [2026-04-10 20:35] Completed Phase4 Milestone 2 product self-check foundations
+- Added a `doctor` mode that validates target-platform fit, audit-log path usability, config loading, and core command readiness, then summarizes actionable local limitations
+- Reused the existing response format to keep the feature explainable and reviewable, and added direct test coverage for healthy, missing-core, and non-RHEL host states
+- Ran `go build ./...` and `go test ./...` successfully and validated `cli-helper doctor` on this RHEL 9 host
+- Result: Phase4 product self-check foundations are complete and validated
+
+## [2026-04-10 20:36] Phase4 Milestone 3 plan
+- Add packaging foundations with explicit CLI version reporting, reproducible local build targets, and local install or setup documentation so the project is easier to build and hand to early testers
+- Keep the milestone local-first: no release publishing, package repository integration, or network-dependent installer behavior by default
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 20:43] Phase4 packaging milestone review findings
+- Review found one portability issue in the first packaging pass: the local scripts defaulted to a workspace-specific Go binary path instead of cleanly falling back to `go` from `PATH` when the bundled toolchain is absent
+- No user-visible parser or safety-label issues were found in the new `version` mode, and the shell scripts were syntactically valid
+- Next step: make the scripts prefer the bundled Go toolchain when present but fall back to `go` from `PATH`, then rerun script and CLI validations before closing the milestone
+
+## [2026-04-10 20:45] Completed Phase4 Milestone 3 packaging foundations
+- Added `cli-helper version`, a build-info package, and local packaging scripts for build, test, and install workflows under `scripts/`
+- Fixed the packaging portability issue by making the scripts auto-detect the bundled Go toolchain or fall back to `go` from `PATH`, and updated README packaging guidance
+- Ran `go build ./...`, `go test ./...`, `bash -n scripts/build.sh scripts/test.sh scripts/install-local.sh`, `./scripts/build.sh`, `./scripts/test.sh`, `INSTALL_DIR=/opt/noso/.cache/install ./scripts/install-local.sh`, and validated `cli-helper version`
+- Result: Phase4 packaging foundations are complete and validated
+
+## [2026-04-10 20:45] Phase4 complete
+- Phase4 roadmap slices are now implemented and validated for output interpretation, product self-checks, and packaging foundations
+- Each milestone included implementation, code review for user-visible behavior and parser or safety issues, any required fixes, rerun build and test validation, and updated documentation and progress logging
+- Result: Phase4 scope from the README is complete
+
+## [2026-04-10 20:53] Phase5 Milestone 1 plan
+- Start Phase5 with audit history foundations by adding a `history` CLI mode that reads the existing local audit log and renders recent records in a human-readable way
+- Support recent-entry listing plus simple query filtering so users can inspect prior assistant guidance before exporting or summarizing it
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 21:02] Phase5 history milestone review findings
+- Review found no user-visible parser or safety-label issues in the new `history` mode; recent-entry listing, text filtering, and JSON rendering worked against the local audit log
+- Review did find missing coverage for the empty-history path, so that case was added before closing the milestone
+- Next step: rerun build and test validation, then log the final validated result for the milestone
+
+## [2026-04-10 21:04] Completed Phase5 Milestone 1 audit history foundations
+- Added audit-log reading and filtering support plus a `history` CLI mode for recent-entry inspection in text or JSON form
+- Reused the existing audit log as the source of truth and added tests for reading, filtering, CLI history rendering, and the no-entry case
+- Ran `go build ./...` and `go test ./...` successfully and validated `cli-helper history --limit 3`, `cli-helper history --limit 2 --match git`, and `cli-helper --json history --limit 1`
+- Result: Phase5 audit history foundations are complete and validated
+
+## [2026-04-10 21:05] Phase5 Milestone 2 plan
+- Add a `runbook` CLI mode that builds a local incident-style summary from recent audit history so users can turn assistant sessions into reusable documentation
+- Support recent-entry selection, simple filtering, and markdown or JSON rendering with sections for summary, commands used, findings, warnings, and suggested next steps
+- After implementation, run a milestone code review focused on user-visible behavior, parser mistakes, safety labeling, and missing tests, fix any findings, then rerun build, tests, and targeted CLI validations before marking it complete
+
+## [2026-04-10 21:09] Phase5 runbook build failure
+- Initial `go build ./...` and `go test ./...` failed because `internal/cli/app.go` used `os.WriteFile` for runbook export without importing `os`
+- Next step: add the missing import, rerun build and tests, then continue the milestone review
+
+## [2026-04-10 21:16] Phase5 runbook milestone review findings
+- Review found one user-visible behavior issue: the initial runbook builder could summarize unsupported or meta audit entries, which could produce self-referential runbooks when the audit log contained old invalid commands
+- The fix was to ignore `unsupported_query` audit records when building runbooks and add direct coverage for that filtering behavior
+- Next step: rerun build, tests, and targeted runbook validations against a clean temporary audit log before closing the milestone
+
+## [2026-04-10 21:18] Completed Phase5 Milestone 2 runbook generation foundations
+- Added deterministic local runbook generation with markdown and JSON rendering plus optional file export from recent audit history
+- Fixed the initial integration build failure by importing `os` in the CLI and fixed runbook summarization so unsupported audit noise is excluded from generated summaries
+- Ran `go build ./...` and `go test ./...` successfully and validated `cli-helper runbook --limit 2`, `cli-helper runbook --limit 1 --format json`, and `cli-helper runbook --limit 1 --output <path>` against a temporary audit log seeded with real assistant queries
+- Result: Phase5 runbook generation foundations are complete and validated
+
+## [2026-04-10 21:18] Phase5 complete
+- Phase5 roadmap slices are now implemented and validated for audit history inspection and local runbook generation or export
+- Each milestone included implementation, code review for user-visible behavior and parser or safety issues, any required fixes, rerun build and test validation, and updated documentation and progress logging
+- Result: Phase5 scope from the README is complete
+
+## [2026-04-10] Release hardening: static analysis and fuzz targets
+
+### Plan
+- Task 3: Add staticcheck to CI as a blocking step after go vet
+- Task 4: Add fuzz targets for the two highest-value user-input paths: safety.Classify and registry.Resolve
+- Constraint: fuzz targets must be safe (no side-effects), deterministic in CI (seed corpus mode only), and useful for adversarial input
+
+### Changes
+
+**Static analysis (Task 3)**
+- Added `go install honnef.co/go/tools/cmd/staticcheck@latest && staticcheck ./...` step to .github/workflows/ci.yml, placed after go vet
+- staticcheck immediately found one real issue: `noColor()` in internal/output/render.go was defined but never called (U1000 — the renderer emits no ANSI codes)
+- Fix: removed noColor() and its os import; the function was dead code from an earlier design sketch
+
+**Fuzz targets (Task 4)**
+- internal/safety/fuzz_test.go: FuzzClassify with 41-entry seed corpus covering normal commands, high/medium/low risk patterns, safe overrides, injection-style inputs (`;`, `$()`, backticks), whitespace variants, non-ASCII, null bytes, and very long inputs. Invariant checked: result is always one of Low/Medium/High.
+- internal/registry/fuzz_test.go: FuzzResolve with 30-entry seed corpus covering normal queries, troubleshoot and explain paths, adversarial inputs, empty string, null bytes, whitespace-only, long inputs, and non-ASCII. Invariant checked: no error returned, IntentID non-empty, Risk is a known value. Queries over 64 KB are skipped (the CLI enforces this limit before calling Resolve).
+- Both fuzz functions document two run modes in their doc comments: `go test -run=FuzzXxx` (seed corpus, used in CI) and `go test -fuzz=FuzzXxx -fuzztime=60s` (mutation, development only)
+- Added "Fuzz seed corpus" step to CI that runs both in seed-corpus mode (deterministic, fast)
+
+### Validation results
+- staticcheck: CLEAN (zero findings after noColor removal)
+- go build ./...: OK
+- FuzzClassify seed corpus: 41/41 PASS
+- FuzzResolve seed corpus: 30/30 PASS
+- Full test suite: all packages PASS
+- Coverage: 87.4% total (output package improved from 81.8% to 87.8% after noColor removal)
+
+### Remaining release tasks
+- Task 5: golangci-lint or additional linter pass (optional, staticcheck covers the high-value checks)
+- Task 6: Verify go install path works against a tagged release
+- Task 7: First-run UX hint for unrecognised queries
+
+## [2026-04-11 00:00] Workspace cleanup after root promotion
+- Promoted the newer `NdumLab/noso` code into the active `/opt/noso` root, added a top-level `.gitignore`, and archived the nested leftover repo from the project tree to `/tmp/noso.bk.archived`
+- Archived transient local artifacts from the project root to `/tmp/noso-artifacts/` so the workspace no longer carries the nested repo, built binary, coverage report, or audit log in-tree
+- Verified the active root now reports `module github.com/NdumLab/noso` and includes the newer intent handlers for service control, package install, DNS lookup, cron listing, and Git push
+- Note: the sandbox does not allow writing to `.git/index`, so tracked-file cleanup in git still needs to be staged manually outside this session if you want a fully clean `git status`
+
+## [2026-04-11 00:10] Fixed release workflow smoke-test blocker
+- Diagnosed the missing GitHub release assets for `v0.1.1` to a failed `CI` workflow on `main`; the release job was skipped because the smoke-test step exited early on the intentional unsupported-query check
+- Updated `.github/workflows/ci.yml` so the unsupported-query assertion temporarily disables `set -e`, captures the exit code, then explicitly verifies that it is `3`
+- Validated the shell pattern locally by building a temporary binary and confirming the old form exits early while the new form passes with `status=3`
+
+## [2026-04-10] Release hardening: staticcheck pin, go install module path, first-run UX hint
+
+### Plan
+- Task 5: Pin staticcheck at a specific version in CI to prevent unexpected breakage from a new release
+- Task 6: Rename module path from bare `noso` to `github.com/noso-dev/noso` so `go install github.com/noso-dev/noso/cmd/cli-helper@latest` resolves via VCS; update README install instructions and replace all `<owner>` placeholders with `noso-dev`
+- Task 7: Add a `Next step:` hint to the `unsupported_query` fallback so first-time users discover the `--help` subcommand when their query doesn't match
+
+### Changes
+
+**Task 5: staticcheck version pin**
+- Changed `go install honnef.co/go/tools/cmd/staticcheck@latest` to `@v0.7.0` in .github/workflows/ci.yml
+- Prevents CI from silently breaking if a future staticcheck release adds new checks or renames existing ones
+
+**Task 6: module path rename**
+- go.mod: `module noso` → `module github.com/noso-dev/noso`
+- All ~50 .go files with internal imports: `"noso/` → `"github.com/noso-dev/noso/`
+- CI ldflags: updated `-X noso/pkg/buildinfo.*` → `-X github.com/noso-dev/noso/pkg/buildinfo.*`
+- README.md: replaced all `<owner>` placeholders with `noso-dev`; added `go install github.com/noso-dev/noso/cmd/cli-helper@latest` as primary install option
+
+**Task 7: first-run UX hint**
+- Added `NextSteps: []string{"Run 'cli-helper --help' to see all subcommands and usage examples."}` to the `unsupported_query` response in internal/registry/intents.go
+- The hint now appears as `Next step:` in terminal output and `next_steps` in JSON when a query doesn't match any intent (exit code 3)
+
+### Validation results
+- go build ./...: OK (Go 1.22.5)
+- go build -o cli-helper ./cmd/cli-helper: OK
+- Smoke tests: all 6 checks pass (version, query, --json, doctor, interpret, exit-3)
+- go vet ./...: CLEAN
+- Fuzz seed corpus: FuzzClassify OK, FuzzResolve OK
+- Full test suite: all 16 packages PASS, 86.9% coverage (above 65% threshold)
+- unsupported_query output now includes: `Next step: Run 'cli-helper --help' to see all subcommands and usage examples.`
+
+## [2026-04-10 18:37] Phase2 Milestone 5 plan
+- Add Ansible foundation support with `ansible` and `ansible-playbook` detection plus read-only and dry-run-first intents for version, inventory inspection, playbook syntax-check, and playbook check mode
+- Keep this milestone limited to safe inspection and preview guidance; do not add ad-hoc mutating playbook runs or broad remote changes by default
+- Validate with build, tests, and representative CLI queries before moving to stronger SSH or remote workflow support
+
+## [2026-04-10 18:21] Phase2 Milestone 3 plan
+- Add Helm foundation support with `helm` detection plus read-only and dry-run-first intents for version, repo listing, release listing, release status, release history, values inspection, and template rendering
+- Keep this milestone limited to inspection and preview flows; do not add install, upgrade, rollback, or uninstall execution guidance by default
+- Validate with build, tests, and representative CLI queries before moving to Terraform or Ansible
+
+## [2026-04-10 18:14] Phase2 Milestone 2 plan
+- Add Kubernetes foundation support with `kubectl` detection, kubeconfig or current-context reporting, read-only inspection intents for pods, deployments, services, namespaces, logs, and describe output, plus starter troubleshooting for CrashLoopBackOff, ImagePullBackOff, and Pending pods
+- Keep all Kubernetes guidance inspection-first and avoid apply, delete, rollout restart, or other cluster-mutating commands in this milestone
+- Validate with build, tests, and representative CLI queries before moving to Helm or other Phase2 domains
+
+## [2026-04-11 04:59] Optional local LLM fallback implementation
+- Added local-LLM config fields and env overrides in `internal/config/config.go`: `llm_enabled`, `llm_endpoint`, and `llm_timeout_ms`
+- Added `internal/llm` with a strict HTTP client plus a separate `noso-llm` local service that exposes `/health` and `/v1/interpret`
+- Added `cmd/noso-llm` as an independent binary so the fallback can be developed and deployed separately from `cli-helper`
+- Wired `internal/cli/app.go` to call the local fallback only when the normal registry returns `unsupported_query`
+- Added registry bridging in `internal/registry/llm.go` so structured fallback candidates map back into existing safe intents instead of generating raw commands directly
+- Updated README configuration docs with the optional local fallback settings and startup example
+
+### Validation results
+- `go build ./...`: OK using bundled Go toolchain and repo-local caches
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK with `XDG_CACHE_HOME=/opt/noso/.cache`
+- `bash scripts/build.sh`: OK with repo-local Go cache env
+- Live smoke: `noso-llm` health endpoint returned OK, `cli-helper "why is worker 2 not up?"` returned a clarification prompt, and `cli-helper "worker2 service status"` resolved to `systemctl status worker2 --no-pager -l`
+
+## [2026-04-11 05:01] Local LLM provider pluggability
+- Added a provider interface in `internal/llm/provider.go` so `noso-llm` can switch backends without changing the `cli-helper` contract
+- Kept the existing heuristic backend as the default provider for deterministic local use
+- Added an Ollama-backed provider in `internal/llm/ollama.go` that sends the same classification request to a local Ollama chat endpoint and expects JSON-only structured intent output
+- Extended `cmd/noso-llm` flags with `-provider`, `-model`, `-ollama-endpoint`, and `-timeout`
+- Updated README with a concrete Ollama startup example
+
+### Validation results
+- `go test ./internal/llm ./cmd/noso-llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go run ./cmd/noso-llm -h`: OK and shows provider-selection flags
+
+## [2026-04-11 05:04] LLM response validation and ranking
+- Added `internal/llm/validate.go` to whitelist supported fallback intents, sanitize free-text fields, normalize tool hints against detected tools, and sort candidates by confidence
+- Applied validation to both the local HTTP client and the `noso-llm` server so malformed provider output is rejected before `cli-helper` consumes it
+- Updated CLI fallback selection to use ranked candidates instead of iterating raw provider order
+- Added tests covering unsupported-intent dropping, clarification validation, and confidence-based candidate ranking
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+
+## [2026-04-11 05:07] LLM retry and failure classification
+- Added typed LLM error handling in `internal/llm/errors.go` so timeout, unavailable, transient-upstream, and invalid-response cases are distinguished explicitly
+- Updated the local LLM HTTP client to classify bad status codes and invalid payloads instead of returning generic errors
+- Added brief retry logic to the Ollama provider for transient transport errors and `429` or `5xx` upstream responses
+- Updated CLI warning text to surface classified fallback failures more clearly during unsupported-query fallback attempts
+- Added tests covering timeout or unavailable classification and transient Ollama retry behavior
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+
+## [2026-04-11 05:10] Local LLM observability
+- Added in-process LLM metrics in `internal/llm/metrics.go` with counters for total requests, successful responses, clarifications, empty responses, retries, and classified error types
+- Added optional append-only JSONL request logging in `internal/llm/log.go`
+- Extended the `noso-llm` HTTP surface with `/metrics` and the binary flags with `-log-path`
+- Wired Ollama retry counting into the shared metrics path so transient upstream instability is visible without external tracing
+- Added server tests covering metrics and request logging behavior
+
+### Validation results
+- `go test ./internal/llm ./cmd/noso-llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+
+## [2026-04-11 05:13] Doctor integration for local LLM health
+- Added `internal/llm/health.go` to probe the local fallback health endpoint and return provider/model readiness details
+- Integrated the LLM health probe into `internal/doctor/check.go` so `cli-helper doctor` reports whether fallback is disabled, healthy, or degraded
+- Added doctor warnings and next-step guidance for timeout, unavailable, transient upstream, and invalid-response fallback failures
+- Added doctor tests covering healthy and unavailable LLM endpoint cases
+
+### Validation results
+- `go test ./internal/doctor ./internal/cli ./internal/llm`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+
+## [2026-04-11 05:23] CLI local LLM log inspection
+- Added `llm_log_path` / `NOSO_LLM_LOG_PATH` configuration so `cli-helper` and `noso-llm` can point at the same JSONL request log
+- Added log reading, filtering, and rendering helpers in `internal/llm/log.go`
+- Added `cli-helper llm-log [--limit N] [--match TEXT]` and wired completions and help text for it
+- Added tests covering config loading, log parsing, and the `llm-log` CLI path
+
+### Validation results
+- `bash scripts/build.sh`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `cli-helper --help`: OK and shows `llm-log`
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --limit 1`: OK
+
+## [2026-04-11 05:26] LLM log time-window filtering
+- Added `--since` to `cli-helper llm-log` with support for RFC3339 timestamps and relative durations like `15m` and `2h`
+- Added `ParseSince` and time-window filtering in `internal/llm/log.go`
+- Added tests covering timestamp parsing, time-window filtering, and the CLI `llm-log --since` path
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --since 2026-04-11T04:00:00Z`: OK
+
+## [2026-04-11 05:28] LLM log provider and error filters
+- Added structured log filtering in `internal/llm/log.go` with `LogFilter` support for provider and error-only criteria
+- Extended `cli-helper llm-log` with `--provider` and `--error-only`
+- Added tests covering provider-specific error filtering and the CLI path for `llm-log --provider ollama --error-only`
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --provider ollama --error-only`: OK
+
+## [2026-04-11 21:41] LLM log clarification-only filter
+- Added `ClarificationOnly` support to the structured log filter in `internal/llm/log.go`
+- Extended `cli-helper llm-log` with `--clarification-only`
+- Added tests covering clarification-only log filtering and the CLI path for `llm-log --clarification-only`
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --clarification-only`: OK
+
+## [2026-04-11 21:45] LLM log summary mode
+- Added `SummarizeLogs` and `RenderLogSummary` in `internal/llm/log.go` to produce aggregate counts for total entries, clarifications, errors, providers, error types, and top intents
+- Extended `cli-helper llm-log` with `--stats` so operators can view summary output without scanning raw entries
+- Added tests covering summary generation, summary rendering, and the CLI `llm-log --stats` path
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats`: OK
+
+## [2026-04-11 22:43] Added troubleshoot probe history and reset controls
+- Extended troubleshoot thread persistence with structured probe records carrying timestamps, commands, summaries, findings, and warnings for each run
+- Added `cli-helper troubleshoot-history` to inspect persisted troubleshoot probe history and `cli-helper troubleshoot-reset` to clear either one query thread or all troubleshoot state
+- Updated README.md with the new operator-facing troubleshoot history and reset workflow
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot-history --query "why is worker 2 not up?"`: OK after a seeded troubleshoot run
+- `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot-reset --query "why is worker 2 not up?"`: OK and subsequent history view returned no matches
+
+## [2026-04-11 22:05] LLM log export formats
+- Extended `cli-helper llm-log` with `--format text|json|markdown|csv` and `--output PATH` for both raw entries and `--stats` summaries
+- Added markdown and CSV renderers in `internal/llm/log.go` for incident-report and spreadsheet-friendly exports
+- Added tests covering markdown summary output, CSV entry export, and file output from the `llm-log` CLI path
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `bash scripts/build.sh`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `cli-helper --help`: OK and shows `llm-log --format ... --output`
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats --format markdown`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --provider ollama --error-only --format csv --output <tmp>`: OK
+
+## [2026-04-11 22:24] Evidence-driven troubleshoot planner
+- Added `cli-helper troubleshoot <plain-English question>` and a registry-side planner that builds ranked, read-only outage probes across service, container, and Kubernetes hypotheses
+- Reused the deterministic registry and troubleshoot templates so ambiguous failures now resolve to a grounded plan instead of stopping at `unsupported_query`
+- Upgraded the local LLM clarification path to convert candidate interpretations into the same ranked troubleshoot plan when possible
+- Added a fast `BasicLookup` path in `internal/evidence` and switched environment detection to use it so startup and uncached CLI tests do not spend time collecting help/man metadata for every known command
+- Added tests covering ambiguous worker outage planning, candidate-driven plan construction, the new `troubleshoot` CLI subcommand, and the stronger unsupported-query fallback behavior
+
+### Validation results
+- `go test ./internal/evidence ./internal/detect ./internal/registry ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK
+
+## [2026-04-11 22:29] Troubleshoot live service evidence loop
+- Added `internal/troubleshoot/evidence.go` to run the first read-only service probe locally, interpret `systemctl status`, and follow with `journalctl -u <service> -n 50 --no-pager` when failure signals are present
+- Wired `cli-helper troubleshoot` to enrich ranked plans with live service evidence instead of only returning a static first command
+- Added tests covering service-failure evidence enrichment and preserving non-service troubleshoot plans without executing extra probes
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and now includes live evidence
+
+## [2026-04-11 22:33] Runtime and Kubernetes evidence loops
+- Extended the troubleshoot evidence runner to interpret `docker|podman ps -a`, `docker|podman logs`, `kubectl get pods`, `kubectl describe pod`, and `kubectl logs`
+- Added runtime follow-up logs when the planned target appears exited, restarting, created, or unhealthy in runtime output
+- Added Kubernetes follow-up describe/log probes when `kubectl get pods` exposes a concrete unhealthy pod, and hardened the path so missing local tools are reported as unavailable instead of being misparsed as evidence
+- Added interpreter coverage and evidence-runner tests for runtime and Kubernetes outputs
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper troubleshoot "docker container worker2 failed to start"`: OK and includes runtime evidence
+- `./bin/cli-helper troubleshoot "pod worker-2 crashloopbackoff"`: OK and reports live probe unavailability cleanly when `kubectl` is absent
+
+## [2026-04-11 22:36] Structured troubleshoot findings
+- Added `findings` to the shared response model so live probe results do not have to be embedded in freeform explanation text
+- Updated terminal rendering to print a dedicated `Findings` section when evidence is present
+- Switched the troubleshoot evidence enrichers to populate structured findings for service, runtime, and Kubernetes probe results
+
+### Validation results
+- `go test ./internal/output ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- `./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and now shows a dedicated `Findings` section
+
+## [2026-04-11 22:39] Stateful troubleshoot follow-up
+- Added a lightweight file-backed troubleshoot thread under the local state directory, configurable via `NOSO_TROUBLESHOOT_STATE_PATH`
+- Stored the last command, accumulated findings, and warnings for repeated outage questions
+- Updated `cli-helper troubleshoot` to reuse thread context and advance to the next unread backtick-wrapped probe when the primary command has already run in the current thread
+- Added tests covering state persistence, thread lookup, and advancing from the initial service probe to the next runtime probe on a repeated outage query
+
+### Validation results
+- `go test ./internal/config ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- repeated `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and second run advances to the next unread probe
+
+## [2026-04-11 22:41] Evidence-aware branch selection
+- Extended `interpret_systemctl_status` to recognize missing-unit output such as `Unit <name>.service could not be found`
+- Updated troubleshoot thread context to rank next probes by family using prior findings and warnings, so missing-systemd evidence prefers runtime or Kubernetes branches before more service-specific follow-ups
+- Added tests covering the missing-unit interpretation and the family-aware next-probe selection
+
+### Validation results
+- `go test ./internal/interpret ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- repeated `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and second run prefers the runtime branch after a missing-unit finding
+
+## [2026-04-11 22:43] Persisted hypothesis family scores
+- Added `family_scores` to the troubleshoot thread state so branch preference survives beyond one-off string heuristics
+- Updated state persistence to score service, runtime, and Kubernetes families based on live findings and warnings, including down-ranking missing-unit service results and unavailable tool families
+- Updated next-probe selection to prefer the highest-scoring unread family before falling back to heuristic ordering
+- Added tests covering persisted score round-trips and runtime up-ranking from container evidence
+
+### Validation results
+- `go test ./internal/troubleshoot ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `bash scripts/build.sh`: OK
+- repeated `NOSO_TROUBLESHOOT_STATE_PATH=<tmp> ./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and second run stays on the higher-scoring runtime branch after the missing-unit service finding
+
+## [2026-04-11 21:45] LLM log summary mode
+- Added `SummarizeLogs` and `RenderLogSummary` in `internal/llm/log.go` to produce aggregate counts for total entries, clarifications, errors, providers, error types, and top intents
+- Extended `cli-helper llm-log` with `--stats` so operators can view summary output without scanning raw entries
+- Added tests covering summary generation, summary rendering, and the CLI `llm-log --stats` path
+
+### Validation results
+- `go test ./internal/llm ./internal/cli`: OK
+- `go build ./...`: OK
+- `go test ./...`: OK
+- `go vet ./...`: OK
+- `staticcheck ./...`: OK
+- `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats`: OK

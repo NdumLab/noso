@@ -23,6 +23,13 @@ func RenderResponse(response models.Response, asJSON bool, quiet bool) (string, 
 	fmt.Fprintf(&b, "Intent: %s\n\n", response.IntentID)
 	fmt.Fprintf(&b, "Command:\n%s\n\n", response.Command)
 	fmt.Fprintf(&b, "Explanation:\n%s\n\n", response.Explanation)
+	if len(response.Findings) > 0 {
+		fmt.Fprint(&b, "Findings:\n")
+		for _, finding := range response.Findings {
+			fmt.Fprintf(&b, "- %s\n", finding)
+		}
+		fmt.Fprint(&b, "\n")
+	}
 	fmt.Fprintf(&b, "Expected output:\n%s\n\n", response.ExpectedOutput)
 	fmt.Fprintf(&b, "Risk: %s\n", response.Risk)
 	fmt.Fprintf(&b, "Confidence: %s\n", response.Confidence)
@@ -79,4 +86,3 @@ func RenderEnvironment(env models.Environment, asJSON bool) (string, error) {
 	}
 	return b.String(), nil
 }
-

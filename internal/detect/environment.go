@@ -26,7 +26,7 @@ func Local() (models.Environment, error) {
 	collector := evidence.NewCollector()
 	commands := make(map[string]models.CommandInfo, len(defaultCommands))
 	for _, name := range defaultCommands {
-		ev := collector.Lookup(name)
+		ev := collector.BasicLookup(name)
 		commands[name] = models.CommandInfo{
 			Name:   name,
 			Path:   ev.Path,

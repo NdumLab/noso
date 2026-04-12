@@ -50,6 +50,20 @@ func TestInterpretSystemctlFailedUnit(t *testing.T) {
 	}
 }
 
+func TestInterpretSystemctlMissingUnit(t *testing.T) {
+	text := "Unit worker2.service could not be found.\n"
+	response, err := Output("systemctl status worker2", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.Confidence != "High" {
+		t.Fatalf("Confidence = %q", response.Confidence)
+	}
+	if !strings.Contains(strings.ToLower(response.Explanation), "could not be found") {
+		t.Fatalf("Explanation = %q", response.Explanation)
+	}
+}
+
 func TestInterpretKubectlDetectsUnhealthyPods(t *testing.T) {
 	text := "NAME READY STATUS RESTARTS AGE\nweb-7c5c 0/1 CrashLoopBackOff 8 10m\napi-9b1d 1/1 Running 0 10m\n"
 	response, err := Output("kubectl get pods -n prod", text)
@@ -61,6 +75,48 @@ func TestInterpretKubectlDetectsUnhealthyPods(t *testing.T) {
 	}
 	if len(response.NextSteps) == 0 {
 		t.Fatal("expected pod follow-up guidance")
+	}
+}
+
+func TestInterpretKubectlDescribePodDetectsCrashLoop(t *testing.T) {
+	text := "State:          Waiting\n  Reason:       CrashLoopBackOff\nEvents:\n  Warning  BackOff  kubelet  Back-off restarting failed container\n"
+	response, err := Output("kubectl describe pod web-7c5c", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.IntentID != "interpret_kubectl_describe_pod" {
+		t.Fatalf("IntentID = %q", response.IntentID)
+	}
+	if response.Confidence != "High" {
+		t.Fatalf("Confidence = %q", response.Confidence)
+	}
+}
+
+func TestInterpretRuntimePSDetectsExitedContainer(t *testing.T) {
+	text := "CONTAINER ID  IMAGE   COMMAND   CREATED   STATUS                     NAMES\nabc123        app     app       1m ago    Exited (1) 10 seconds ago  worker2\n"
+	response, err := Output("podman ps -a", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.IntentID != "interpret_runtime_ps" {
+		t.Fatalf("IntentID = %q", response.IntentID)
+	}
+	if response.Confidence != "High" {
+		t.Fatalf("Confidence = %q", response.Confidence)
+	}
+}
+
+func TestInterpretRuntimeLogsDetectsErrors(t *testing.T) {
+	text := "error: failed to bind socket: permission denied\n"
+	response, err := Output("podman logs --tail 100 worker2", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	if response.IntentID != "interpret_runtime_logs" {
+		t.Fatalf("IntentID = %q", response.IntentID)
+	}
+	if response.Confidence != "High" {
+		t.Fatalf("Confidence = %q", response.Confidence)
 	}
 }
 

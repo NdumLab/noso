@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/NdumLab/noso/internal/audit"
 	"github.com/NdumLab/noso/internal/config"
@@ -15,10 +17,13 @@ import (
 	"github.com/NdumLab/noso/internal/evidence"
 	"github.com/NdumLab/noso/internal/history"
 	"github.com/NdumLab/noso/internal/interpret"
+	"github.com/NdumLab/noso/internal/llm"
 	"github.com/NdumLab/noso/internal/output"
 	"github.com/NdumLab/noso/internal/registry"
 	"github.com/NdumLab/noso/internal/runbook"
+	"github.com/NdumLab/noso/internal/troubleshoot"
 	"github.com/NdumLab/noso/pkg/buildinfo"
+	"github.com/NdumLab/noso/pkg/models"
 )
 
 // Exit codes used by the CLI.  Scripts can branch on these.
@@ -33,8 +38,8 @@ const (
 // Input size guards prevent the CLI from consuming unbounded memory on
 // accidental pipe-ins or malformed invocations.
 const (
-	maxQueryBytes  = 64 * 1024        // 64 KB — plain-English questions are small
-	maxInputBytes  = 512 * 1024       // 512 KB — for pasted command output in interpret mode
+	maxQueryBytes = 64 * 1024  // 64 KB — plain-English questions are small
+	maxInputBytes = 512 * 1024 // 512 KB — for pasted command output in interpret mode
 )
 
 const usageText = `noso translates plain-English Linux and DevOps questions into safer command guidance.
@@ -45,6 +50,10 @@ Usage:
   cli-helper env
   cli-helper doctor
   cli-helper history [--limit N] [--match TEXT]
+  cli-helper llm-log [--limit N] [--match TEXT] [--since RFC3339|DURATION] [--provider NAME] [--error-only] [--clarification-only] [--stats] [--format text|json|markdown|csv] [--output PATH]
+  cli-helper troubleshoot [flags] <plain-English question>
+  cli-helper troubleshoot-history [--limit N] [--query TEXT] [--match TEXT]
+  cli-helper troubleshoot-reset [--query TEXT]
   cli-helper runbook [--limit N] [--match TEXT] [--format markdown|json] [--output PATH]
   cli-helper version
   cli-helper completion <bash|zsh|fish>
@@ -57,6 +66,16 @@ Examples:
   cli-helper env
   cli-helper doctor
   cli-helper history --limit 5 --match git
+  cli-helper llm-log --limit 10 --match timeout
+  cli-helper llm-log --since 2h --match transient
+  cli-helper llm-log --provider ollama --error-only
+  cli-helper llm-log --clarification-only
+  cli-helper llm-log --since 24h --stats
+  cli-helper troubleshoot "why is worker 2 not up?"
+  cli-helper troubleshoot-history --query "why is worker 2 not up?"
+  cli-helper troubleshoot-reset --query "why is worker 2 not up?"
+  cli-helper llm-log --since 24h --stats --format markdown --output llm-summary.md
+  cli-helper llm-log --provider ollama --error-only --format csv --output llm-errors.csv
   cli-helper runbook --limit 10 --format markdown --output incident.md
   cli-helper version
   cli-helper completion bash > /etc/bash_completion.d/cli-helper
@@ -131,6 +150,14 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (in
 		return ExitOK, nil
 	case "history":
 		return runHistory(rest[1:], stdout, stderr, jsonOut, quiet, cfg)
+	case "llm-log":
+		return runLLMLog(rest[1:], stdout, stderr, jsonOut, cfg)
+	case "troubleshoot":
+		return runTroubleshoot(rest[1:], stdout, stderr, jsonOut, quiet, cfg, env, collector, logger)
+	case "troubleshoot-history":
+		return runTroubleshootHistory(rest[1:], stdout, stderr, jsonOut, cfg)
+	case "troubleshoot-reset":
+		return runTroubleshootReset(rest[1:], stdout, stderr, cfg)
 	case "runbook":
 		return runRunbook(rest[1:], stdout, stderr, cfg)
 	case "version":
@@ -156,6 +183,22 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (in
 		return ExitErr, err
 	}
 
+	if response.IntentID == "unsupported_query" {
+		if plan, ok, planErr := registry.TroubleshootPlan(query, env, collector); planErr == nil && ok {
+			response = plan
+		} else if planErr != nil {
+			return ExitErr, planErr
+		}
+	}
+
+	if response.IntentID == "unsupported_query" && cfg.LLMEnabled {
+		if fallback, ok, fallbackErr := resolveWithLLM(cfg, query, env, collector); fallbackErr == nil && ok {
+			response = fallback
+		} else if fallbackErr != nil && !quiet {
+			response.Warnings = append(response.Warnings, llm.DescribeError(fallbackErr)+": "+fallbackErr.Error())
+		}
+	}
+
 	if err := logger.Append(query, response); err != nil && !quiet {
 		response.Warnings = append(response.Warnings, "audit log unavailable: "+err.Error())
 	}
@@ -172,6 +215,92 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (in
 
 	fmt.Fprint(stdout, rendered)
 	return exitCode, nil
+}
+
+func resolveWithLLM(cfg config.Config, query string, env models.Environment, collector evidence.Collector) (models.Response, bool, error) {
+	client := llm.NewClient(cfg)
+	req := llm.BuildRequest(query, env)
+	resp, err := client.Interpret(context.Background(), req)
+	if err != nil {
+		return models.Response{}, false, err
+	}
+
+	if resp.NeedsClarification {
+		if plan, ok, err := registry.TroubleshootPlanFromCandidates(query, env, collector, resp.Candidates); err == nil && ok {
+			plan.Warnings = append(plan.Warnings, "clarification prompt from local llm: "+resp.ClarificationQuestion)
+			return plan, true, nil
+		} else if err != nil {
+			return models.Response{}, false, err
+		}
+		return registry.ClarificationResponse(resp.ClarificationQuestion, resp.Candidates), true, nil
+	}
+
+	for _, candidate := range llm.RankedCandidates(resp, 0.5) {
+		resolved, ok, resolveErr := registry.ResolveLLMCandidate(candidate, env, collector)
+		if resolveErr != nil {
+			return models.Response{}, false, resolveErr
+		}
+		if ok {
+			return resolved, true, nil
+		}
+	}
+
+	return models.Response{}, false, nil
+}
+
+func runTroubleshoot(args []string, stdout io.Writer, stderr io.Writer, jsonOut, quiet bool, cfg config.Config, env models.Environment, collector evidence.Collector, logger audit.Logger) (int, error) {
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		return ExitUsage, fmt.Errorf("troubleshoot requires a plain-English question")
+	}
+	if len(query) > maxQueryBytes {
+		return ExitUsage, fmt.Errorf("query too long: %d bytes (max %d)", len(query), maxQueryBytes)
+	}
+
+	response, ok, err := registry.TroubleshootPlan(query, env, collector)
+	if err != nil {
+		return ExitErr, err
+	}
+	if !ok && cfg.LLMEnabled {
+		response, ok, err = resolveWithLLM(cfg, query, env, collector)
+		if err != nil {
+			return ExitErr, err
+		}
+	}
+	if !ok {
+		response = registry.ClarificationResponse(
+			"noso could not confidently classify this outage yet. Name the object type if you can, for example: service, container, pod, host, or port.",
+			nil,
+		)
+		response.IntentID = "troubleshoot_unclassified"
+		response.ExpectedOutput = "A narrower troubleshoot question that names the failing service, container, pod, or host."
+	} else {
+		if state, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath); stateErr == nil {
+			if thread, found := troubleshoot.FindThread(state, query); found {
+				response = troubleshoot.ApplyThreadContext(response, thread)
+			}
+		} else if !quiet {
+			response.Warnings = append(response.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
+		}
+		response = troubleshoot.EnrichWithLiveEvidence(response)
+	}
+	if state, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath); stateErr == nil {
+		if saveErr := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshoot.UpdateState(state, query, response)); saveErr != nil && !quiet {
+			response.Warnings = append(response.Warnings, "troubleshoot state save failed: "+saveErr.Error())
+		}
+	} else if !quiet {
+		response.Warnings = append(response.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
+	}
+
+	if err := logger.Append(query, response); err != nil && !quiet {
+		response.Warnings = append(response.Warnings, "audit log unavailable: "+err.Error())
+	}
+	rendered, err := output.RenderResponse(response, jsonOut, quiet)
+	if err != nil {
+		return ExitErr, err
+	}
+	fmt.Fprint(stdout, rendered)
+	return ExitOK, nil
 }
 
 func runHistory(args []string, stdout io.Writer, stderr io.Writer, jsonOut, quiet bool, cfg config.Config) (int, error) {
@@ -200,6 +329,141 @@ func runHistory(args []string, stdout io.Writer, stderr io.Writer, jsonOut, quie
 		return ExitErr, err
 	}
 	fmt.Fprint(stdout, rendered)
+	return ExitOK, nil
+}
+
+func runLLMLog(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
+	fs := flag.NewFlagSet("llm-log", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var limit int
+	var match string
+	var sinceArg string
+	var provider string
+	var errorOnly bool
+	var clarificationOnly bool
+	var stats bool
+	var format string
+	var outputPath string
+	fs.IntVar(&limit, "limit", 10, "maximum number of LLM log entries to show")
+	fs.StringVar(&match, "match", "", "filter LLM log entries by query, provider, model, intent, or error text")
+	fs.StringVar(&sinceArg, "since", "", "show only LLM log entries since an RFC3339 timestamp or duration like 15m or 2h")
+	fs.StringVar(&provider, "provider", "", "show only LLM log entries for a specific provider such as heuristic or ollama")
+	fs.BoolVar(&errorOnly, "error-only", false, "show only LLM log entries that recorded an error")
+	fs.BoolVar(&clarificationOnly, "clarification-only", false, "show only LLM log entries that required clarification")
+	fs.BoolVar(&stats, "stats", false, "render an aggregate summary instead of raw LLM log entries")
+	fs.StringVar(&format, "format", "", "render format: text, json, markdown, or csv (defaults to text or json when --json is set)")
+	fs.StringVar(&outputPath, "output", "", "optional output path for rendered LLM log entries or summaries")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return ExitOK, nil
+		}
+		return ExitUsage, err
+	}
+
+	if cfg.LLMLogPath == "" {
+		return ExitErr, fmt.Errorf("llm log path is not configured; set NOSO_LLM_LOG_PATH or llm_log_path")
+	}
+
+	records, err := llm.ReadLog(cfg.LLMLogPath)
+	if err != nil {
+		return ExitErr, fmt.Errorf("llm log read failed: %w", err)
+	}
+	since, err := llm.ParseSince(sinceArg, time.Now().UTC())
+	if err != nil {
+		return ExitUsage, err
+	}
+	records = llm.FilterLogsWith(records, llm.LogFilter{
+		Match:             match,
+		Limit:             limit,
+		Since:             since,
+		Provider:          provider,
+		ErrorOnly:         errorOnly,
+		ClarificationOnly: clarificationOnly,
+	})
+
+	if strings.TrimSpace(format) == "" {
+		if jsonOut {
+			format = "json"
+		} else {
+			format = "text"
+		}
+	}
+
+	var rendered string
+	if stats {
+		rendered, err = llm.RenderLogSummaryFormat(llm.SummarizeLogs(records), format)
+	} else {
+		rendered, err = llm.RenderLogsFormat(records, format)
+	}
+	if err != nil {
+		return ExitErr, err
+	}
+	if outputPath != "" {
+		if err := os.WriteFile(outputPath, []byte(rendered), 0o600); err != nil {
+			return ExitErr, fmt.Errorf("llm log write failed: %w", err)
+		}
+	}
+	fmt.Fprint(stdout, rendered)
+	return ExitOK, nil
+}
+
+func runTroubleshootHistory(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
+	fs := flag.NewFlagSet("troubleshoot-history", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var limit int
+	var query string
+	var match string
+	fs.IntVar(&limit, "limit", 10, "maximum number of troubleshoot probe entries to show")
+	fs.StringVar(&query, "query", "", "show only troubleshoot history for the matching plain-English question")
+	fs.StringVar(&match, "match", "", "filter troubleshoot history by query, command, summary, findings, or warnings")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return ExitOK, nil
+		}
+		return ExitUsage, err
+	}
+
+	state, err := troubleshoot.LoadState(cfg.TroubleshootStatePath)
+	if err != nil {
+		return ExitErr, fmt.Errorf("troubleshoot state read failed: %w", err)
+	}
+	records := troubleshoot.FilterHistory(troubleshoot.FlattenHistory(state), query, match, limit)
+	rendered, err := troubleshoot.RenderHistory(records, jsonOut)
+	if err != nil {
+		return ExitErr, err
+	}
+	fmt.Fprint(stdout, rendered)
+	return ExitOK, nil
+}
+
+func runTroubleshootReset(args []string, stdout io.Writer, stderr io.Writer, cfg config.Config) (int, error) {
+	fs := flag.NewFlagSet("troubleshoot-reset", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+
+	var query string
+	fs.StringVar(&query, "query", "", "reset troubleshoot state only for the matching plain-English question; omit to clear all troubleshoot state")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return ExitOK, nil
+		}
+		return ExitUsage, err
+	}
+
+	state, err := troubleshoot.LoadState(cfg.TroubleshootStatePath)
+	if err != nil {
+		return ExitErr, fmt.Errorf("troubleshoot state read failed: %w", err)
+	}
+	state = troubleshoot.ResetState(state, query)
+	if err := troubleshoot.SaveState(cfg.TroubleshootStatePath, state); err != nil {
+		return ExitErr, fmt.Errorf("troubleshoot state reset failed: %w", err)
+	}
+	if strings.TrimSpace(query) == "" {
+		fmt.Fprintln(stdout, "Cleared all troubleshoot state.")
+	} else {
+		fmt.Fprintf(stdout, "Cleared troubleshoot state for query: %s\n", query)
+	}
 	return ExitOK, nil
 }
 
@@ -312,7 +576,7 @@ _cli_helper() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    local subcommands="ask env doctor history runbook version completion interpret"
+    local subcommands="ask env doctor history llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret"
 
     if [[ ${COMP_CWORD} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "${cur}") )
@@ -321,7 +585,7 @@ _cli_helper() {
 
     case "${prev}" in
         completion) COMPREPLY=( $(compgen -W "bash zsh fish" -- "${cur}") ) ;;
-        --format)   COMPREPLY=( $(compgen -W "markdown json" -- "${cur}") ) ;;
+        --format)   COMPREPLY=( $(compgen -W "text markdown json csv" -- "${cur}") ) ;;
         --output)   COMPREPLY=( $(compgen -f -- "${cur}") ) ;;
     esac
 }
@@ -331,7 +595,7 @@ complete -F _cli_helper cli-helper
 const zshCompletion = `#compdef cli-helper
 _cli_helper() {
     local -a subcommands
-    subcommands=(ask env doctor history runbook version completion interpret)
+    subcommands=(ask env doctor history llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret)
     _arguments \
         '1: :->subcmd' \
         '*: :->args'
@@ -348,7 +612,7 @@ _cli_helper
 `
 
 const fishCompletion = `# fish completion for cli-helper
-set -l subcommands ask env doctor history runbook version completion interpret
+set -l subcommands ask env doctor history llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret
 complete -c cli-helper -f -n "not __fish_seen_subcommand_from $subcommands" -a "$subcommands"
 complete -c cli-helper -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 `

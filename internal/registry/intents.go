@@ -112,8 +112,8 @@ var (
 
 	// DNS lookup: extract host from "nslookup example.com", "dig 8.8.8.8",
 	// "dns lookup for google.com", "lookup example.com"
-	dnsLookupRegex  = regexp.MustCompile(`\b(?:nslookup|dns\s+lookup|resolve\s+(?:dns|hostname))\b`)
-	dnsHostExtract  = regexp.MustCompile(`\b(?:nslookup|dig|lookup|resolve)\s+(?:dns\s+(?:for\s+)?|hostname\s+|for\s+)?([a-zA-Z0-9][a-zA-Z0-9._:-]*)`)
+	dnsLookupRegex = regexp.MustCompile(`\b(?:nslookup|dns\s+lookup|resolve\s+(?:dns|hostname))\b`)
+	dnsHostExtract = regexp.MustCompile(`\b(?:nslookup|dig|lookup|resolve)\s+(?:dns\s+(?:for\s+)?|hostname\s+|for\s+)?([a-zA-Z0-9][a-zA-Z0-9._:-]*)`)
 
 	// Cron jobs
 	cronListRegex = regexp.MustCompile(`(?:list|show|view)\s+cron(?:tab)?(?:\s+jobs?)?|crontab\s+-l|\bschedule(?:d)?\s+(?:tasks?|jobs?)\b`)

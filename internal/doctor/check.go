@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/NdumLab/noso/internal/config"
+	"github.com/NdumLab/noso/internal/llm"
 	"github.com/NdumLab/noso/internal/safety"
 	"github.com/NdumLab/noso/pkg/models"
 )
@@ -15,7 +16,7 @@ func Check(cfg config.Config, env models.Environment) models.Response {
 	response := models.Response{
 		IntentID:       "doctor",
 		Command:        "doctor",
-		ExpectedOutput: "A summary of local readiness, config health, platform fit, and command availability.",
+		ExpectedOutput: "A summary of local readiness, config health, platform fit, command availability, and optional LLM fallback health.",
 		Risk:           safety.RiskLow,
 		Confidence:     "High",
 		VerifiedFrom:   []string{"/etc/os-release", "command -v", "config"},
@@ -51,13 +52,23 @@ func Check(cfg config.Config, env models.Environment) models.Response {
 		warnings = append(warnings, "core commands missing: "+strings.Join(missingCore, ", "))
 	}
 
+	llmStatus, llmErr := llm.CheckHealth(cfg)
+	if cfg.LLMEnabled {
+		response.VerifiedFrom = append(response.VerifiedFrom, cfg.LLMEndpoint)
+	}
+	if llmErr != nil {
+		warnings = append(warnings, llm.DescribeError(llmErr))
+	} else if llmStatus.Enabled && llmStatus.Healthy {
+		response.VerifiedFrom = append(response.VerifiedFrom, "llm health")
+	}
+
 	response.Warnings = warnings
-	response.Explanation = summary(env, cfg, warnings)
+	response.Explanation = summary(env, cfg, warnings, llmStatus)
 	response.NextSteps = nextSteps(cfg, warnings)
 	return response
 }
 
-func summary(env models.Environment, cfg config.Config, warnings []string) string {
+func summary(env models.Environment, cfg config.Config, warnings []string, llmStatus llm.HealthStatus) string {
 	base := "Local readiness checks completed."
 	switch {
 	case env.Distro != "" && env.PackageManager != "":
@@ -69,6 +80,13 @@ func summary(env models.Environment, cfg config.Config, warnings []string) strin
 	}
 	if cfg.AuditLogPath != "" {
 		base += " Audit logging is configured."
+	}
+	if cfg.LLMEnabled {
+		if llmStatus.Healthy {
+			base += fmt.Sprintf(" %s", llmStatus.Message)
+		} else {
+			base += " Local LLM fallback is enabled."
+		}
 	}
 	if len(warnings) == 0 {
 		return base + " No blocking issues were detected."
@@ -87,6 +105,11 @@ func nextSteps(cfg config.Config, warnings []string) []string {
 			steps = append(steps, "Set `NOSO_AUDIT_LOG_PATH` to a writable path if you want local audit logging.")
 		case strings.Contains(warning, "core commands missing"):
 			steps = append(steps, "Install the missing core commands to restore the corresponding intent coverage.")
+		case strings.Contains(warning, "local llm timed out"),
+			strings.Contains(warning, "local llm is unavailable"),
+			strings.Contains(warning, "local llm upstream returned a transient failure"),
+			strings.Contains(warning, "local llm returned an invalid response"):
+			steps = append(steps, "Check the local LLM service with `curl <llm-endpoint-base>/health` or disable fallback with `NOSO_LLM_ENABLED=0` until it is healthy.")
 		}
 	}
 	if len(steps) == 0 && cfg.AuditLogPath != "" {

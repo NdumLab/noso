@@ -10,7 +10,6 @@ import (
 	"github.com/NdumLab/noso/pkg/models"
 )
 
-
 func diskFreeIntent(collector evidence.Collector) (models.Response, error) {
 	ev := collector.Lookup("df")
 	command := "df -h"

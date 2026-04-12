@@ -69,9 +69,9 @@ func TestGCloudAccountIntent(t *testing.T) {
 
 func TestCloudVersionIntents(t *testing.T) {
 	cases := map[string]string{
-		"aws version":     "inspect_aws_version",
-		"azure version":   "inspect_azure_version",
-		"gcloud version":  "inspect_gcloud_version",
+		"aws version":    "inspect_aws_version",
+		"azure version":  "inspect_azure_version",
+		"gcloud version": "inspect_gcloud_version",
 	}
 
 	for query, intentID := range cases {

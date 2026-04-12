@@ -1,6 +1,8 @@
 package doctor
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,5 +99,66 @@ func TestCheckLegacyFallback(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(response.Warnings, " "), "ubuntu") {
 		t.Fatalf("Warnings = %v", response.Warnings)
+	}
+}
+
+func TestCheckHealthyLLMEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"ok","provider":"heuristic","model":"heuristic-local"}`))
+	}))
+	defer server.Close()
+
+	cfg := config.Config{
+		Mode:         "strict-local",
+		AuditLogPath: filepath.Join(t.TempDir(), "audit.log"),
+		LLMEnabled:   true,
+		LLMEndpoint:  server.URL + "/v1/interpret",
+		LLMTimeoutMS: 500,
+	}
+	env := models.Environment{
+		OSID:     "rhel",
+		Distro:   "rhel",
+		IsRHEL9:  true,
+		Commands: allCoreCommandsPresent(),
+	}
+
+	response := Check(cfg, env)
+	if len(response.Warnings) != 0 {
+		t.Fatalf("Warnings = %v, want none", response.Warnings)
+	}
+	if !strings.Contains(response.Explanation, "Local LLM fallback is healthy") {
+		t.Fatalf("Explanation = %q", response.Explanation)
+	}
+}
+
+func TestCheckWarnsForUnavailableLLMEndpoint(t *testing.T) {
+	cfg := config.Config{
+		Mode:         "strict-local",
+		AuditLogPath: filepath.Join(t.TempDir(), "audit.log"),
+		LLMEnabled:   true,
+		LLMEndpoint:  "http://127.0.0.1:1/v1/interpret",
+		LLMTimeoutMS: 100,
+	}
+	env := models.Environment{
+		OSID:     "rhel",
+		Distro:   "rhel",
+		IsRHEL9:  true,
+		Commands: allCoreCommandsPresent(),
+	}
+
+	response := Check(cfg, env)
+	if len(response.Warnings) == 0 {
+		t.Fatal("expected LLM warning")
+	}
+	if !strings.Contains(strings.Join(response.Warnings, " "), "local llm") {
+		t.Fatalf("Warnings = %v", response.Warnings)
+	}
+	if len(response.NextSteps) == 0 {
+		t.Fatal("expected next step for LLM issue")
 	}
 }

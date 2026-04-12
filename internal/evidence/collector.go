@@ -30,12 +30,11 @@ func NewCollector() Collector {
 	return Collector{timeout: 2 * time.Second}
 }
 
-// Lookup probes the local system for information about name.
-// name must come from trusted/internal code, not raw user input.
-func (c Collector) Lookup(name string) Evidence {
+// BasicLookup performs only existence/path discovery without help, man, or
+// completion probes. Use it for broad environment scans where command
+// inventory matters more than deep verification metadata.
+func (c Collector) BasicLookup(name string) Evidence {
 	ev := Evidence{CommandName: name}
-
-	// exec.LookPath replaces bash -c "command -v name" — no shell involved.
 	if path, err := exec.LookPath(name); err == nil {
 		ev.Exists = true
 		ev.Path = path
@@ -46,7 +45,13 @@ func (c Collector) Lookup(name string) Evidence {
 		ev.Kind = "builtin"
 		ev.VerificationSources = append(ev.VerificationSources, "builtin")
 	}
+	return ev
+}
 
+// Lookup probes the local system for information about name.
+// name must come from trusted/internal code, not raw user input.
+func (c Collector) Lookup(name string) Evidence {
+	ev := c.BasicLookup(name)
 	if !ev.Exists {
 		return ev
 	}
