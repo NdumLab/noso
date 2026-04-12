@@ -266,3 +266,26 @@ func TestUpsertAlertSeedsPodTargeting(t *testing.T) {
 		t.Fatalf("NextSteps = %#v", record.NextSteps)
 	}
 }
+
+func TestBootstrapThreadFromIncidentRecord(t *testing.T) {
+	record := Record{
+		Query:        "worker pod alert",
+		ActiveFamily: "kubernetes",
+		ActiveTarget: "worker-2",
+		Namespace:    "prod",
+		LastCommand:  "kubectl describe pod -n prod worker-2",
+	}
+	thread, ok := BootstrapThread(record)
+	if !ok {
+		t.Fatal("BootstrapThread() = false, want true")
+	}
+	if thread.Query != record.Query || thread.ActiveFamily != "kubernetes" || thread.ActiveTarget != "worker-2" {
+		t.Fatalf("thread = %#v", thread)
+	}
+	if len(thread.Executed) != 0 {
+		t.Fatalf("Executed = %#v, want empty for a seeded-but-unrun incident probe", thread.Executed)
+	}
+	if len(thread.LastDiscovery) == 0 {
+		t.Fatal("expected discovery hint from alert labels")
+	}
+}

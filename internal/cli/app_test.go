@@ -273,7 +273,9 @@ func TestRunIncidentIngestCorrelatesByLabels(t *testing.T) {
 
 func TestRunIncidentIngestSeedsPodTargeting(t *testing.T) {
 	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
 	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", troubleshootPath)
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -293,6 +295,57 @@ func TestRunIncidentIngestSeedsPodTargeting(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "Last command: kubectl describe pod -n prod worker-2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	threadState, err := troubleshoot.LoadState(troubleshootPath)
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	thread, ok := troubleshoot.FindThread(threadState, "worker pod alert")
+	if !ok {
+		t.Fatal("expected troubleshoot thread bootstrap from incident ingest")
+	}
+	if thread.ActiveFamily != "kubernetes" || thread.ActiveTarget != "worker-2" || thread.ActiveNamespace != "prod" {
+		t.Fatalf("thread = %#v", thread)
+	}
+	if len(thread.Executed) != 0 {
+		t.Fatalf("Executed = %#v, want no executed probes yet", thread.Executed)
+	}
+}
+
+func TestRunTroubleshootUsesBootstrapThreadFromIncident(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", troubleshootPath)
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{
+		"incident-ingest",
+		"--query", "worker pod alert",
+		"--source", "alertmanager",
+		"--severity", "critical",
+		"--summary", "Worker pod is crashing",
+		"--label", "namespace=prod",
+		"--label", "pod=worker-2",
+	}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("incident-ingest code=%d err=%v", code, err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code, err = Run([]string{"troubleshoot", "worker", "pod", "alert"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("troubleshoot code=%d err=%v stderr=%q", code, err, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "kubectl describe pod -n prod worker-2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Using the incident-seeded target as the first read-only troubleshoot probe.") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }

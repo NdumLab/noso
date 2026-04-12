@@ -22,6 +22,7 @@ import (
 	"github.com/NdumLab/noso/internal/output"
 	"github.com/NdumLab/noso/internal/registry"
 	"github.com/NdumLab/noso/internal/runbook"
+	"github.com/NdumLab/noso/internal/safety"
 	"github.com/NdumLab/noso/internal/troubleshoot"
 	"github.com/NdumLab/noso/pkg/buildinfo"
 	"github.com/NdumLab/noso/pkg/models"
@@ -324,6 +325,12 @@ func runTroubleshoot(args []string, stdout io.Writer, stderr io.Writer, jsonOut,
 				directResponseOK = true
 			}
 			state = troubleshoot.UpdateThread(state, threadKey, threadContext)
+		} else if latestThread, found := troubleshoot.FindThread(state, threadKey); found {
+			threadContext = latestThread
+			if response, ok := directResponseForThread(latestThread); ok {
+				directResponse = response
+				directResponseOK = true
+			}
 		}
 	}
 
@@ -557,6 +564,25 @@ func runIncidentIngest(args []string, stdin io.Reader, stdout io.Writer, stderr 
 	if err := incident.SaveState(cfg.IncidentStatePath, state); err != nil {
 		return ExitErr, err
 	}
+	if troubleshootState, err := troubleshoot.LoadState(cfg.TroubleshootStatePath); err == nil {
+		for _, alert := range alerts {
+			record, ok := incident.Find(state, firstCLIValue(alert.Query, alert.Summary))
+			if !ok {
+				continue
+			}
+			if _, found := troubleshoot.FindThread(troubleshootState, record.Query); found {
+				continue
+			}
+			if thread, ok := incident.BootstrapThread(record); ok {
+				troubleshootState = troubleshoot.UpdateThread(troubleshootState, record.Query, thread)
+			}
+		}
+		if err := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshootState); err != nil {
+			fmt.Fprintf(stderr, "warning: troubleshoot state save failed: %v\n", err)
+		}
+	} else if strings.TrimSpace(cfg.TroubleshootStatePath) != "" {
+		fmt.Fprintf(stderr, "warning: troubleshoot state unavailable: %v\n", err)
+	}
 	if jsonOut && len(alerts) > 1 {
 		records := make([]incident.Record, 0, len(alerts))
 		for _, alert := range alerts {
@@ -714,8 +740,21 @@ func directResponseForThread(thread troubleshoot.StateThread) (models.Response, 
 	if thread.ActiveTarget == "" || thread.ActiveFamily == "" {
 		return models.Response{}, false
 	}
+	if len(thread.Executed) == 0 && strings.TrimSpace(thread.LastCommand) != "" {
+		return models.Response{
+			IntentID:       "incident_bootstrap_probe",
+			Command:        thread.LastCommand,
+			Explanation:    "Using the incident-seeded target as the first read-only troubleshoot probe.",
+			ExpectedOutput: "Initial live evidence for the incident-seeded target.",
+			Risk:           safety.Classify(thread.LastCommand),
+			Confidence:     "High",
+			Discovery:      append([]string{}, thread.LastDiscovery...),
+		}, true
+	}
 	var command string
 	switch thread.ActiveFamily {
+	case "kubernetes":
+		command = "kubectl describe pod " + thread.ActiveTarget
 	case "kubernetes-pvc":
 		command = "kubectl describe pvc " + thread.ActiveTarget
 	case "kubernetes-secret":
@@ -728,6 +767,8 @@ func directResponseForThread(thread troubleshoot.StateThread) (models.Response, 
 		command = "kubectl describe service " + thread.ActiveTarget
 	case "kubernetes-node":
 		command = "kubectl describe node " + thread.ActiveTarget
+	case "service":
+		command = "systemctl status " + thread.ActiveTarget + " --no-pager -l"
 	default:
 		return models.Response{}, false
 	}
