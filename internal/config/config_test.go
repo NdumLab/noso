@@ -15,6 +15,7 @@ func TestLoadUsesEnvOverrides(t *testing.T) {
 	t.Setenv("NOSO_LLM_TIMEOUT_MS", "2500")
 	t.Setenv("NOSO_LLM_LOG_PATH", filepath.Join(t.TempDir(), "noso-llm.jsonl"))
 	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", filepath.Join(t.TempDir(), "troubleshoot-state.json"))
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", filepath.Join(t.TempDir(), "incident-state.json"))
 
 	cfg, err := Load()
 	if err != nil {
@@ -38,6 +39,9 @@ func TestLoadUsesEnvOverrides(t *testing.T) {
 	}
 	if cfg.TroubleshootStatePath == "" {
 		t.Fatal("TroubleshootStatePath should not be empty")
+	}
+	if cfg.IncidentStatePath == "" {
+		t.Fatal("IncidentStatePath should not be empty")
 	}
 }
 

@@ -19,6 +19,7 @@ type Config struct {
 	LLMTimeoutMS          int    `json:"llm_timeout_ms"`
 	LLMLogPath            string `json:"llm_log_path"`
 	TroubleshootStatePath string `json:"troubleshoot_state_path"`
+	IncidentStatePath     string `json:"incident_state_path"`
 }
 
 var validModes = map[string]bool{
@@ -80,6 +81,9 @@ func Load() (Config, error) {
 	if v := os.Getenv("NOSO_TROUBLESHOOT_STATE_PATH"); v != "" {
 		cfg.TroubleshootStatePath = v
 	}
+	if v := os.Getenv("NOSO_INCIDENT_STATE_PATH"); v != "" {
+		cfg.IncidentStatePath = v
+	}
 
 	if err := cfg.Validate(); err != nil {
 		return Config{}, err
@@ -97,6 +101,7 @@ func defaultConfig() Config {
 		LLMTimeoutMS:          1500,
 		LLMLogPath:            "",
 		TroubleshootStatePath: defaultTroubleshootStatePath(),
+		IncidentStatePath:     defaultIncidentStatePath(),
 	}
 }
 
@@ -139,6 +144,24 @@ func defaultTroubleshootStatePath() string {
 		}
 	}
 	return filepath.Join(os.TempDir(), "noso", "troubleshoot-state.json")
+}
+
+func defaultIncidentStatePath() string {
+	candidates := []string{}
+	if stateHome := os.Getenv("XDG_STATE_HOME"); stateHome != "" {
+		candidates = append(candidates, filepath.Join(stateHome, "noso", "incident-state.json"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates, filepath.Join(home, ".local", "state", "noso", "incident-state.json"))
+	}
+	candidates = append(candidates, filepath.Join(os.TempDir(), "noso", "incident-state.json"))
+
+	for _, candidate := range candidates {
+		if AuditPathUsable(candidate) {
+			return candidate
+		}
+	}
+	return filepath.Join(os.TempDir(), "noso", "incident-state.json")
 }
 
 func AuditPathUsable(path string) bool {

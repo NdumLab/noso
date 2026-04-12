@@ -273,6 +273,10 @@ Each troubleshoot thread now also keeps a probe history with timestamps, command
 ```bash
 cli-helper troubleshoot-history --query "why is worker 2 not up?"
 cli-helper troubleshoot-reset --query "why is worker 2 not up?"
+cli-helper incident-status --query "why is worker 2 not up?"
+cli-helper incident-history --status open
+cli-helper incident-observe --query "why is worker 2 not up?"
+cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deployment image pull secret fixed"
 ```
 
 Troubleshoot threads now also persist likely root-cause scores inferred from live findings. That lets repeated runs converge toward explanations such as a missing systemd unit, a crashing container, a permission failure, a database dependency problem, or a Kubernetes CrashLoopBackOff instead of only moving through probe families.
@@ -338,6 +342,19 @@ Those Kubernetes infrastructure objects are now stateful troubleshoot targets to
 That continuity now extends through refinement as well. Once the active thread is already on a PVC, Secret, ConfigMap, or node, follow-up queries keep that object type and namespace instead of collapsing back into a pod-first outage guess.
 
 The same owner-object promotion now also covers higher-level Kubernetes workload objects discovered in event text. When the event stream points at a Deployment or Service, `troubleshoot` now surfaces exact `kubectl describe deployment ...` or `kubectl describe service ...` follow-ups, and repeated queries can adopt those objects into the active thread just like pods, PVCs, and nodes.
+
+Troubleshoot runs now also update a lightweight incident record. Each incident tracks the original query, open or resolved status, current target, latest probe, likely causes, next steps, and probe history so operators can come back to an outage without re-reading raw troubleshoot output.
+
+Use the incident commands to inspect or close those records directly:
+
+```bash
+cli-helper incident-status --query "why is worker 2 not up?"
+cli-helper incident-history --status open
+cli-helper incident-observe --query "why is worker 2 not up?"
+cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deployment image pull secret fixed"
+```
+
+`incident-observe` is the first policy-controlled execution surface in `noso`. It only runs explicit, low-risk, read-only probes from the incident’s queued next steps, and it refuses mutation-oriented commands even if they appear in the incident guidance. Today that allowlist covers observation commands such as `systemctl status`, `journalctl -u`, `docker|podman ps`, `docker|podman logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp`.
 
 You can also run `noso-llm` against a real local model runtime through Ollama while keeping the same JSON contract:
 

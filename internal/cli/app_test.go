@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/NdumLab/noso/internal/incident"
 	"github.com/NdumLab/noso/internal/llm"
 	"github.com/NdumLab/noso/internal/troubleshoot"
 	"github.com/NdumLab/noso/pkg/models"
@@ -101,6 +102,56 @@ func TestRunHistoryModeNoEntries(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	if !strings.Contains(stdout.String(), "No audit history entries matched.") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunIncidentStatusAndResolve(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", filepath.Join(t.TempDir(), "troubleshoot-state.json"))
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"troubleshoot", "why", "is", "worker", "2", "not", "up?"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("seed troubleshoot code=%d err=%v", code, err)
+	}
+
+	state, err := incident.LoadState(incidentPath)
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	record, ok := incident.Find(state, "why is worker 2 not up?")
+	if !ok {
+		t.Fatal("expected incident record after troubleshoot run")
+	}
+	if record.Status != "open" {
+		t.Fatalf("Status = %q, want open", record.Status)
+	}
+
+	stdout.Reset()
+	code, err = Run([]string{"incident-status", "--query", "why is worker 2 not up?"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("incident-status code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "Incident: why is worker 2 not up?") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	stdout.Reset()
+	code, err = Run([]string{"incident-resolve", "--query", "why is worker 2 not up?", "--summary", "validated corrected workload target"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("incident-resolve code=%d err=%v", code, err)
+	}
+
+	stdout.Reset()
+	code, err = Run([]string{"incident-history", "--status", "resolved"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("incident-history code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "(resolved)") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }
