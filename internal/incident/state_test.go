@@ -92,3 +92,54 @@ func TestStateRoundTrip(t *testing.T) {
 		t.Fatalf("Record = %#v", record)
 	}
 }
+
+func TestUpsertAlertCreatesIncident(t *testing.T) {
+	state := UpsertAlert(State{}, Alert{
+		Query:    "api availability alert",
+		Source:   "alertmanager",
+		Severity: "critical",
+		Summary:  "API error rate above threshold",
+		Labels: map[string]string{
+			"service":   "api",
+			"namespace": "prod",
+		},
+	})
+	if len(state.Incidents) != 1 {
+		t.Fatalf("len(Incidents) = %d, want 1", len(state.Incidents))
+	}
+	record := state.Incidents[0]
+	if record.Source != "alertmanager" || record.Severity != "critical" {
+		t.Fatalf("Record = %#v", record)
+	}
+	if record.Labels["service"] != "api" {
+		t.Fatalf("Labels = %#v", record.Labels)
+	}
+}
+
+func TestUpsertAlertReopensResolvedIncident(t *testing.T) {
+	state := State{Incidents: []Record{{
+		ID:         "alertmanager api availability alert",
+		Query:      "api availability alert",
+		Status:     "resolved",
+		StartedAt:  "2026-04-12T18:00:00Z",
+		UpdatedAt:  "2026-04-12T18:05:00Z",
+		ResolvedAt: "2026-04-12T18:06:00Z",
+		Resolution: "previous fix",
+	}}}
+	updated := UpsertAlert(state, Alert{
+		Query:    "api availability alert",
+		Source:   "alertmanager",
+		Severity: "warning",
+		Summary:  "API latency above threshold",
+	})
+	record, ok := Find(updated, "api availability alert")
+	if !ok {
+		t.Fatal("Find() = false, want true")
+	}
+	if record.Status != "open" {
+		t.Fatalf("Status = %q, want open", record.Status)
+	}
+	if record.Resolution != "" || record.ResolvedAt != "" {
+		t.Fatalf("Record = %#v", record)
+	}
+}

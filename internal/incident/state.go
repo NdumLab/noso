@@ -16,24 +16,38 @@ type State struct {
 }
 
 type Record struct {
-	ID           string        `json:"id"`
-	Query        string        `json:"query"`
-	Status       string        `json:"status"`
-	StartedAt    string        `json:"started_at"`
-	UpdatedAt    string        `json:"updated_at"`
-	ResolvedAt   string        `json:"resolved_at,omitempty"`
-	Resolution   string        `json:"resolution,omitempty"`
-	ActiveFamily string        `json:"active_family,omitempty"`
-	ActiveTarget string        `json:"active_target,omitempty"`
-	Namespace    string        `json:"namespace,omitempty"`
-	LastIntentID string        `json:"last_intent_id,omitempty"`
-	LastCommand  string        `json:"last_command,omitempty"`
-	LastSummary  string        `json:"last_summary,omitempty"`
-	LikelyCauses []string      `json:"likely_causes,omitempty"`
-	LastFindings []string      `json:"last_findings,omitempty"`
-	LastWarnings []string      `json:"last_warnings,omitempty"`
-	NextSteps    []string      `json:"next_steps,omitempty"`
-	ProbeHistory []ProbeRecord `json:"probe_history,omitempty"`
+	ID           string            `json:"id"`
+	Query        string            `json:"query"`
+	Status       string            `json:"status"`
+	Source       string            `json:"source,omitempty"`
+	Severity     string            `json:"severity,omitempty"`
+	Summary      string            `json:"summary,omitempty"`
+	Fingerprint  string            `json:"fingerprint,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	StartedAt    string            `json:"started_at"`
+	UpdatedAt    string            `json:"updated_at"`
+	ResolvedAt   string            `json:"resolved_at,omitempty"`
+	Resolution   string            `json:"resolution,omitempty"`
+	ActiveFamily string            `json:"active_family,omitempty"`
+	ActiveTarget string            `json:"active_target,omitempty"`
+	Namespace    string            `json:"namespace,omitempty"`
+	LastIntentID string            `json:"last_intent_id,omitempty"`
+	LastCommand  string            `json:"last_command,omitempty"`
+	LastSummary  string            `json:"last_summary,omitempty"`
+	LikelyCauses []string          `json:"likely_causes,omitempty"`
+	LastFindings []string          `json:"last_findings,omitempty"`
+	LastWarnings []string          `json:"last_warnings,omitempty"`
+	NextSteps    []string          `json:"next_steps,omitempty"`
+	ProbeHistory []ProbeRecord     `json:"probe_history,omitempty"`
+}
+
+type Alert struct {
+	Query       string            `json:"query"`
+	Source      string            `json:"source,omitempty"`
+	Severity    string            `json:"severity,omitempty"`
+	Summary     string            `json:"summary,omitempty"`
+	Fingerprint string            `json:"fingerprint,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
 }
 
 type ProbeRecord struct {
@@ -139,6 +153,59 @@ func Resolve(state State, query string, resolution string) State {
 	return state
 }
 
+func UpsertAlert(state State, alert Alert) State {
+	now := time.Now().UTC().Format(time.RFC3339)
+	query := strings.TrimSpace(alert.Query)
+	if query == "" {
+		query = strings.TrimSpace(alert.Summary)
+	}
+	id := normalizeAlertIdentity(alert, query)
+	record := Record{
+		ID:          id,
+		Query:       query,
+		Status:      "open",
+		Source:      strings.TrimSpace(alert.Source),
+		Severity:    normalizeSeverity(alert.Severity),
+		Summary:     strings.TrimSpace(alert.Summary),
+		Fingerprint: strings.TrimSpace(alert.Fingerprint),
+		Labels:      cloneLabels(alert.Labels),
+		StartedAt:   now,
+		UpdatedAt:   now,
+		LastSummary: strings.TrimSpace(alert.Summary),
+	}
+	replaced := false
+	for i, existing := range state.Incidents {
+		if existing.ID != id && normalizeKey(existing.Query) != normalizeKey(query) {
+			continue
+		}
+		record.StartedAt = existing.StartedAt
+		record.ActiveFamily = existing.ActiveFamily
+		record.ActiveTarget = existing.ActiveTarget
+		record.Namespace = existing.Namespace
+		record.LastIntentID = existing.LastIntentID
+		record.LastCommand = existing.LastCommand
+		record.LikelyCauses = append([]string{}, existing.LikelyCauses...)
+		record.LastFindings = append([]string{}, existing.LastFindings...)
+		record.LastWarnings = append([]string{}, existing.LastWarnings...)
+		record.NextSteps = append([]string{}, existing.NextSteps...)
+		record.ProbeHistory = append([]ProbeRecord{}, existing.ProbeHistory...)
+		record.Resolution = existing.Resolution
+		record.ResolvedAt = existing.ResolvedAt
+		if existing.Status == "resolved" {
+			record.Status = "open"
+			record.Resolution = ""
+			record.ResolvedAt = ""
+		}
+		state.Incidents[i] = record
+		replaced = true
+		break
+	}
+	if !replaced {
+		state.Incidents = append([]Record{record}, state.Incidents...)
+	}
+	return state
+}
+
 func Reset(state State, query string) State {
 	key := normalizeKey(query)
 	filtered := state.Incidents[:0]
@@ -193,4 +260,35 @@ func summarize(response models.Response) string {
 
 func normalizeKey(value string) string {
 	return strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
+}
+
+func normalizeSeverity(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "critical", "warning", "info":
+		return strings.ToLower(strings.TrimSpace(value))
+	default:
+		return strings.TrimSpace(value)
+	}
+}
+
+func normalizeAlertIdentity(alert Alert, query string) string {
+	if fp := normalizeKey(alert.Fingerprint); fp != "" {
+		return fp
+	}
+	parts := []string{
+		normalizeKey(alert.Source),
+		normalizeKey(query),
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func cloneLabels(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
 }

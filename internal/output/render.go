@@ -47,12 +47,16 @@ func RenderResponse(response models.Response, asJSON bool, quiet bool) (string, 
 		}
 		fmt.Fprint(&b, "\n")
 	}
+	if len(response.VerifiedFrom) > 0 {
+		fmt.Fprint(&b, "Verified from:\n")
+		for _, item := range response.VerifiedFrom {
+			fmt.Fprintf(&b, "- %s\n", item)
+		}
+		fmt.Fprint(&b, "\n")
+	}
 	fmt.Fprintf(&b, "Expected output:\n%s\n\n", response.ExpectedOutput)
 	fmt.Fprintf(&b, "Risk: %s\n", response.Risk)
 	fmt.Fprintf(&b, "Confidence: %s\n", response.Confidence)
-	if len(response.VerifiedFrom) > 0 {
-		fmt.Fprintf(&b, "Verified from: %s\n", strings.Join(response.VerifiedFrom, ", "))
-	}
 	if !quiet {
 		for _, step := range response.NextSteps {
 			fmt.Fprintf(&b, "Next step: %s\n", step)

@@ -275,6 +275,7 @@ cli-helper troubleshoot-history --query "why is worker 2 not up?"
 cli-helper troubleshoot-reset --query "why is worker 2 not up?"
 cli-helper incident-status --query "why is worker 2 not up?"
 cli-helper incident-history --status open
+cli-helper incident-ingest --query "api availability alert" --source alertmanager --severity critical --summary "API error rate above threshold" --label service=api --label namespace=prod
 cli-helper incident-observe --query "why is worker 2 not up?"
 cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deployment image pull secret fixed"
 ```
@@ -350,11 +351,22 @@ Use the incident commands to inspect or close those records directly:
 ```bash
 cli-helper incident-status --query "why is worker 2 not up?"
 cli-helper incident-history --status open
+cli-helper incident-ingest --query "api availability alert" --source alertmanager --severity critical --summary "API error rate above threshold" --label service=api --label namespace=prod
 cli-helper incident-observe --query "why is worker 2 not up?"
 cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Deployment image pull secret fixed"
 ```
 
+`incident-ingest` opens or updates an incident from a structured external signal. It is a local ingest path for alert sources like Alertmanager, schedulers, or other automation that can call the CLI with a stable query or fingerprint plus metadata such as source, severity, summary, and labels.
+
 `incident-observe` is the first policy-controlled execution surface in `noso`. It only runs explicit, low-risk, read-only probes from the incident’s queued next steps, and it refuses mutation-oriented commands even if they appear in the incident guidance. Today that allowlist covers observation commands such as `systemctl status`, `journalctl -u`, `docker|podman ps`, `docker|podman logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp`.
+
+You can also let it advance through multiple approved probes in one pass:
+
+```bash
+cli-helper incident-observe --query "why is worker 2 not up?" --max-steps 3
+```
+
+That loop stays bounded and read-only. It carries unread approved next steps forward between probe executions, updates the incident record after each step, and stops when it runs out of allowed probes or reaches the requested step limit.
 
 You can also run `noso-llm` against a real local model runtime through Ollama while keeping the same JSON contract:
 

@@ -658,7 +658,27 @@
 
 ### Validation results
 - `go test ./internal/incident ./internal/cli`: OK
-- `go build ./...`: pending full pass
+- `go build ./...`: OK
+
+## [2026-04-12 19:45] Bounded multi-step incident observe loops
+- Extended `incident-observe` with `--max-steps` so an incident can advance through several approved read-only probes in one bounded run instead of requiring one command per step
+- Preserved unread approved next steps between observe iterations so the execution loop can continue through the queued incident probes while still incorporating newly interpreted follow-up guidance
+- Updated README to document bounded multi-step observe execution and validated the live path with a two-step incident observe smoke
+
+### Validation results
+- `go test ./internal/incident ./internal/output ./internal/cli`: OK
+- `go build ./...`: OK
+- live `incident-observe --max-steps 2`: OK
+
+## [2026-04-12 19:49] Structured alert ingestion into incidents
+- Added `incident-ingest` so local automation or alert sources can open or update incidents with structured metadata including source, severity, summary, fingerprint, and labels
+- Extended incident records to persist alert metadata and render it through the existing incident status/history flow
+- Kept ingestion local and deterministic: alert intake updates the same incident state model used by troubleshoot and observe instead of introducing a separate alert store
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+- `go build ./cmd/cli-helper`: OK
+- `./cmd/cli-helper --help`: OK and shows `incident-ingest`
 
 ## [2026-04-12 17:18] Make Kubernetes log probes container-aware
 - Updated the live Kubernetes evidence loop to carry the discovered `container_hint` into both `kubectl logs` execution and rendered `kubectl logs` follow-up steps

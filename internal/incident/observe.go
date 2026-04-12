@@ -45,6 +45,10 @@ func ObserveNext(record Record) (models.Response, string, error) {
 	return observeNextWithRunner(record, runReadOnlyCommand)
 }
 
+func ObserveMany(record Record, maxSteps int) ([]models.Response, []string, error) {
+	return observeManyWithRunner(record, maxSteps, runReadOnlyCommand)
+}
+
 func observeNextWithRunner(record Record, run runner) (models.Response, string, error) {
 	command, err := NextObserveCommand(record)
 	if err != nil {
@@ -87,6 +91,31 @@ func observeNextWithRunner(record Record, run runner) (models.Response, string, 
 	return response, command, nil
 }
 
+func observeManyWithRunner(record Record, maxSteps int, run runner) ([]models.Response, []string, error) {
+	if maxSteps <= 0 {
+		return nil, nil, fmt.Errorf("max observe steps must be greater than zero")
+	}
+	working := record
+	var responses []models.Response
+	var commands []string
+	for i := 0; i < maxSteps; i++ {
+		response, command, err := observeNextWithRunner(working, run)
+		if err != nil {
+			if i == 0 {
+				return nil, nil, err
+			}
+			break
+		}
+		responses = append(responses, response)
+		commands = append(commands, command)
+		working = applyObservedResponse(working, response)
+		if noUnreadApprovedProbe(working) {
+			break
+		}
+	}
+	return responses, commands, nil
+}
+
 func NextObserveCommand(record Record) (string, error) {
 	executed := map[string]bool{}
 	for _, probe := range record.ProbeHistory {
@@ -108,6 +137,11 @@ func NextObserveCommand(record Record) (string, error) {
 		return command, nil
 	}
 	return "", fmt.Errorf("no unread approved read-only probe is available for this incident")
+}
+
+func noUnreadApprovedProbe(record Record) bool {
+	_, err := NextObserveCommand(record)
+	return err != nil
 }
 
 func ObserveAllowed(command string) bool {
@@ -153,4 +187,46 @@ func extractBacktickCommand(step string) string {
 		return ""
 	}
 	return strings.TrimSpace(rest[:end])
+}
+
+func applyObservedResponse(record Record, response models.Response) Record {
+	previousSteps := append([]string{}, record.NextSteps...)
+	record.LastIntentID = response.IntentID
+	record.LastCommand = response.Command
+	record.LastSummary = summarize(response)
+	record.LikelyCauses = append([]string{}, response.LikelyCauses...)
+	record.LastFindings = append([]string{}, response.Findings...)
+	record.LastWarnings = append([]string{}, response.Warnings...)
+	record.NextSteps = mergeNextSteps(previousSteps, response.Command, response.NextSteps)
+	record.ProbeHistory = append([]ProbeRecord{{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Command:   response.Command,
+		Summary:   summarize(response),
+		Findings:  append([]string{}, response.Findings...),
+		Warnings:  append([]string{}, response.Warnings...),
+	}}, record.ProbeHistory...)
+	return record
+}
+
+func mergeNextSteps(previous []string, executed string, current []string) []string {
+	var merged []string
+	seen := map[string]bool{}
+	addStep := func(step string) {
+		step = strings.TrimSpace(step)
+		if step == "" || seen[step] {
+			return
+		}
+		if command := extractBacktickCommand(step); command != "" && strings.TrimSpace(command) == strings.TrimSpace(executed) {
+			return
+		}
+		seen[step] = true
+		merged = append(merged, step)
+	}
+	for _, step := range previous {
+		addStep(step)
+	}
+	for _, step := range current {
+		addStep(step)
+	}
+	return merged
 }

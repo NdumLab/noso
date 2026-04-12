@@ -20,6 +20,12 @@ func RenderStatus(record Record, asJSON bool) (string, error) {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Incident: %s\n", record.Query)
 	fmt.Fprintf(&b, "Status: %s\n", record.Status)
+	if record.Source != "" {
+		fmt.Fprintf(&b, "Source: %s\n", record.Source)
+	}
+	if record.Severity != "" {
+		fmt.Fprintf(&b, "Severity: %s\n", record.Severity)
+	}
 	fmt.Fprintf(&b, "Started: %s\n", record.StartedAt)
 	fmt.Fprintf(&b, "Updated: %s\n", record.UpdatedAt)
 	if record.ResolvedAt != "" {
@@ -38,6 +44,12 @@ func RenderStatus(record Record, asJSON bool) (string, error) {
 	}
 	if record.LastSummary != "" {
 		fmt.Fprintf(&b, "Summary: %s\n", record.LastSummary)
+	}
+	if len(record.Labels) > 0 {
+		fmt.Fprint(&b, "Labels:\n")
+		for key, value := range record.Labels {
+			fmt.Fprintf(&b, "- %s=%s\n", key, value)
+		}
 	}
 	if record.LastCommand != "" {
 		fmt.Fprintf(&b, "Last command: %s\n", record.LastCommand)

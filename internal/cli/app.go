@@ -53,7 +53,8 @@ Usage:
   cli-helper history [--limit N] [--match TEXT]
   cli-helper incident-status [--query TEXT]
   cli-helper incident-history [--limit N] [--query TEXT] [--match TEXT] [--status open|resolved]
-  cli-helper incident-observe --query TEXT
+  cli-helper incident-ingest --query TEXT [--source TEXT] [--severity TEXT] [--summary TEXT] [--fingerprint TEXT] [--label key=value]
+  cli-helper incident-observe --query TEXT [--max-steps N]
   cli-helper incident-resolve --query TEXT [--summary TEXT]
   cli-helper llm-log [--limit N] [--match TEXT] [--since RFC3339|DURATION] [--provider NAME] [--error-only] [--clarification-only] [--stats] [--format text|json|markdown|csv] [--output PATH]
   cli-helper troubleshoot [flags] <plain-English question>
@@ -73,7 +74,9 @@ Examples:
   cli-helper history --limit 5 --match git
   cli-helper incident-status --query "why is worker 2 not up?"
   cli-helper incident-history --status open
+  cli-helper incident-ingest --query "api availability alert" --source alertmanager --severity critical --summary "API error rate above threshold" --label service=api --label namespace=prod
   cli-helper incident-observe --query "why is worker 2 not up?"
+  cli-helper incident-observe --query "why is worker 2 not up?" --max-steps 3
   cli-helper incident-resolve --query "why is worker 2 not up?" --summary "Pod image pull secret fixed"
   cli-helper llm-log --limit 10 --match timeout
   cli-helper llm-log --since 2h --match transient
@@ -163,6 +166,8 @@ func Run(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (in
 		return runIncidentStatus(rest[1:], stdout, stderr, jsonOut, cfg)
 	case "incident-history":
 		return runIncidentHistory(rest[1:], stdout, stderr, jsonOut, cfg)
+	case "incident-ingest":
+		return runIncidentIngest(rest[1:], stdout, stderr, jsonOut, cfg)
 	case "incident-observe":
 		return runIncidentObserve(rest[1:], stdout, stderr, jsonOut, quiet, cfg)
 	case "incident-resolve":
@@ -481,6 +486,72 @@ func runIncidentHistory(args []string, stdout io.Writer, stderr io.Writer, jsonO
 	return ExitOK, nil
 }
 
+type labelsFlag map[string]string
+
+func (f *labelsFlag) String() string {
+	if f == nil || len(*f) == 0 {
+		return ""
+	}
+	var parts []string
+	for key, value := range *f {
+		parts = append(parts, key+"="+value)
+	}
+	return strings.Join(parts, ",")
+}
+
+func (f *labelsFlag) Set(value string) error {
+	parts := strings.SplitN(strings.TrimSpace(value), "=", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return fmt.Errorf("label must be key=value")
+	}
+	if *f == nil {
+		*f = map[string]string{}
+	}
+	(*f)[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	return nil
+}
+
+func runIncidentIngest(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
+	fs := flag.NewFlagSet("incident-ingest", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	query := fs.String("query", "", "incident query or title to open/update")
+	source := fs.String("source", "", "alert source, such as alertmanager")
+	severity := fs.String("severity", "", "alert severity, such as critical or warning")
+	summary := fs.String("summary", "", "alert summary text")
+	fingerprint := fs.String("fingerprint", "", "stable alert fingerprint for deduplication")
+	var labels labelsFlag
+	fs.Var(&labels, "label", "alert label in key=value form; repeat for multiple labels")
+	if err := fs.Parse(args); err != nil {
+		return ExitUsage, err
+	}
+	if strings.TrimSpace(*query) == "" && strings.TrimSpace(*summary) == "" {
+		return ExitUsage, fmt.Errorf("incident-ingest requires --query or --summary")
+	}
+	state, err := incident.LoadState(cfg.IncidentStatePath)
+	if err != nil {
+		return ExitErr, err
+	}
+	alert := incident.Alert{
+		Query:       strings.TrimSpace(*query),
+		Source:      strings.TrimSpace(*source),
+		Severity:    strings.TrimSpace(*severity),
+		Summary:     strings.TrimSpace(*summary),
+		Fingerprint: strings.TrimSpace(*fingerprint),
+		Labels:      map[string]string(labels),
+	}
+	state = incident.UpsertAlert(state, alert)
+	if err := incident.SaveState(cfg.IncidentStatePath, state); err != nil {
+		return ExitErr, err
+	}
+	record, _ := incident.Find(state, firstCLIValue(alert.Query, alert.Summary))
+	rendered, renderErr := incident.RenderStatus(record, jsonOut)
+	if renderErr != nil {
+		return ExitErr, renderErr
+	}
+	fmt.Fprint(stdout, rendered)
+	return ExitOK, nil
+}
+
 func runIncidentResolve(args []string, stdout io.Writer, stderr io.Writer, cfg config.Config) (int, error) {
 	fs := flag.NewFlagSet("incident-resolve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -508,11 +579,15 @@ func runIncidentObserve(args []string, stdout io.Writer, stderr io.Writer, jsonO
 	fs := flag.NewFlagSet("incident-observe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	query := fs.String("query", "", "incident query to observe")
+	maxSteps := fs.Int("max-steps", 1, "maximum approved read-only probes to run in sequence")
 	if err := fs.Parse(args); err != nil {
 		return ExitUsage, err
 	}
 	if strings.TrimSpace(*query) == "" {
 		return ExitUsage, fmt.Errorf("incident-observe requires --query")
+	}
+	if *maxSteps <= 0 {
+		return ExitUsage, fmt.Errorf("incident-observe requires --max-steps >= 1")
 	}
 
 	incidentState, err := incident.LoadState(cfg.IncidentStatePath)
@@ -524,42 +599,53 @@ func runIncidentObserve(args []string, stdout io.Writer, stderr io.Writer, jsonO
 		return ExitUsage, fmt.Errorf("incident not found for query %q", strings.TrimSpace(*query))
 	}
 
-	response, _, err := incident.ObserveNext(record)
+	responses, _, err := incident.ObserveMany(record, *maxSteps)
 	if err != nil {
 		return ExitErr, err
 	}
-
+	if len(responses) == 0 {
+		return ExitErr, fmt.Errorf("incident observe produced no responses")
+	}
 	troubleshootState, stateErr := troubleshoot.LoadState(cfg.TroubleshootStatePath)
+	var finalResponse models.Response
 	var thread troubleshoot.StateThread
-	if stateErr == nil {
-		if existing, found := troubleshoot.FindThread(troubleshootState, record.Query); found {
-			thread = troubleshoot.PreviewThread(existing, record.Query, response)
-			response = troubleshoot.AttachLikelyCauses(response, thread)
-			if saveErr := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshoot.UpdateState(troubleshootState, record.Query, response)); saveErr != nil && !quiet {
-				response.Warnings = append(response.Warnings, "troubleshoot state save failed: "+saveErr.Error())
+	for idx, response := range responses {
+		if stateErr == nil {
+			if existing, found := troubleshoot.FindThread(troubleshootState, record.Query); found {
+				thread = troubleshoot.PreviewThread(existing, record.Query, response)
 			}
 		}
-	} else if !quiet {
-		response.Warnings = append(response.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
-	}
-
-	if thread.Query == "" {
-		thread = troubleshoot.StateThread{
-			Query:           record.Query,
-			ActiveFamily:    record.ActiveFamily,
-			ActiveTarget:    record.ActiveTarget,
-			ActiveNamespace: record.Namespace,
+		if thread.Query == "" {
+			thread = troubleshoot.StateThread{
+				Query:           record.Query,
+				ActiveFamily:    record.ActiveFamily,
+				ActiveTarget:    record.ActiveTarget,
+				ActiveNamespace: record.Namespace,
+			}
+			thread = troubleshoot.PreviewThread(thread, record.Query, response)
 		}
-		thread = troubleshoot.PreviewThread(thread, record.Query, response)
 		response = troubleshoot.AttachLikelyCauses(response, thread)
+		if idx > 0 {
+			response.Warnings = append(response.Warnings, fmt.Sprintf("incident observe advanced through %d approved probes in this run", idx+1))
+		}
+		if stateErr == nil {
+			troubleshootState = troubleshoot.UpdateState(troubleshootState, record.Query, response)
+		}
+		incidentState = incident.UpdateFromTroubleshoot(incidentState, thread, response)
+		finalResponse = response
 	}
-
-	incidentState = incident.UpdateFromTroubleshoot(incidentState, thread, response)
+	if stateErr == nil {
+		if saveErr := troubleshoot.SaveState(cfg.TroubleshootStatePath, troubleshootState); saveErr != nil && !quiet {
+			finalResponse.Warnings = append(finalResponse.Warnings, "troubleshoot state save failed: "+saveErr.Error())
+		}
+	} else if !quiet {
+		finalResponse.Warnings = append(finalResponse.Warnings, "troubleshoot state unavailable: "+stateErr.Error())
+	}
 	if saveErr := incident.SaveState(cfg.IncidentStatePath, incidentState); saveErr != nil && !quiet {
-		response.Warnings = append(response.Warnings, "incident state save failed: "+saveErr.Error())
+		finalResponse.Warnings = append(finalResponse.Warnings, "incident state save failed: "+saveErr.Error())
 	}
 
-	rendered, renderErr := output.RenderResponse(response, jsonOut, quiet)
+	rendered, renderErr := output.RenderResponse(finalResponse, jsonOut, quiet)
 	if renderErr != nil {
 		return ExitErr, renderErr
 	}
@@ -625,6 +711,15 @@ func directResponseForThread(thread troubleshoot.StateThread) (models.Response, 
 		Namespace: thread.ActiveNamespace,
 		Command:   command,
 	})
+}
+
+func firstCLIValue(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func runLLMLog(args []string, stdout io.Writer, stderr io.Writer, jsonOut bool, cfg config.Config) (int, error) {
@@ -871,7 +966,7 @@ _cli_helper() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    local subcommands="ask env doctor history incident-status incident-history incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret"
+    local subcommands="ask env doctor history incident-status incident-history incident-ingest incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret"
 
     if [[ ${COMP_CWORD} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${subcommands}" -- "${cur}") )
@@ -890,7 +985,7 @@ complete -F _cli_helper cli-helper
 const zshCompletion = `#compdef cli-helper
 _cli_helper() {
     local -a subcommands
-    subcommands=(ask env doctor history incident-status incident-history incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret)
+    subcommands=(ask env doctor history incident-status incident-history incident-ingest incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret)
     _arguments \
         '1: :->subcmd' \
         '*: :->args'
@@ -907,7 +1002,7 @@ _cli_helper
 `
 
 const fishCompletion = `# fish completion for cli-helper
-set -l subcommands ask env doctor history incident-status incident-history incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret
+set -l subcommands ask env doctor history incident-status incident-history incident-ingest incident-observe incident-resolve llm-log troubleshoot troubleshoot-history troubleshoot-reset runbook version completion interpret
 complete -c cli-helper -f -n "not __fish_seen_subcommand_from $subcommands" -a "$subcommands"
 complete -c cli-helper -f -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 `

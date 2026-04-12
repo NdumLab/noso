@@ -156,6 +156,80 @@ func TestRunIncidentStatusAndResolve(t *testing.T) {
 	}
 }
 
+func TestRunIncidentIngest(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{
+		"incident-ingest",
+		"--query", "api availability alert",
+		"--source", "alertmanager",
+		"--severity", "critical",
+		"--summary", "API error rate above threshold",
+		"--label", "service=api",
+		"--label", "namespace=prod",
+	}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("Run() code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "Source: alertmanager") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Severity: critical") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "service=api") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunIncidentObserveMaxSteps(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	troubleshootPath := filepath.Join(t.TempDir(), "troubleshoot-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+	t.Setenv("NOSO_TROUBLESHOOT_STATE_PATH", troubleshootPath)
+	t.Setenv("NOSO_AUDIT_LOG_PATH", t.TempDir()+"/audit.log")
+
+	if err := incident.SaveState(incidentPath, incident.State{
+		Incidents: []incident.Record{{
+			ID:          "why is worker 2 not up?",
+			Query:       "why is worker 2 not up?",
+			Status:      "open",
+			StartedAt:   "2026-04-12T19:00:00Z",
+			UpdatedAt:   "2026-04-12T19:00:00Z",
+			LastCommand: "systemctl status worker2 --no-pager -l",
+			NextSteps: []string{
+				"Evidence follow-up: Run `journalctl -u worker2 -n 50 --no-pager` to inspect the most recent service logs.",
+				"Evidence follow-up: Run `ss -ltnp` to inspect local listeners.",
+			},
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	if err := troubleshoot.SaveState(troubleshootPath, troubleshoot.State{
+		Threads: []troubleshoot.StateThread{{
+			Query:        "why is worker 2 not up?",
+			ActiveFamily: "service",
+			ActiveTarget: "worker2",
+		}},
+	}); err != nil {
+		t.Fatalf("SaveState() error = %v", err)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{"incident-observe", "--query", "why is worker 2 not up?", "--max-steps", "2"}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("Run() code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "incident observe advanced through 2 approved probes in this run") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
 func TestRunCompletionBash(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}

@@ -68,3 +68,39 @@ func TestObserveNextWithRunner(t *testing.T) {
 		t.Fatalf("Explanation = %q", response.Explanation)
 	}
 }
+
+func TestObserveManyWithRunner(t *testing.T) {
+	record := Record{
+		Query:       "why is worker 2 not up?",
+		LastCommand: "systemctl status worker2 --no-pager -l",
+		NextSteps: []string{
+			"Evidence follow-up: Run `journalctl -u worker2 -n 50 --no-pager` to inspect the most recent service logs.",
+			"Evidence follow-up: Run `ss -ltnp` to inspect local listeners.",
+		},
+		ProbeHistory: []ProbeRecord{{
+			Command: "systemctl status worker2 --no-pager -l",
+		}},
+	}
+	var seen []string
+	responses, commands, err := observeManyWithRunner(record, 2, func(_ context.Context, cmd string) (string, error) {
+		seen = append(seen, cmd)
+		switch cmd {
+		case "journalctl -u worker2 -n 50 --no-pager", "journalctl -u <service> -n 100 --no-pager":
+			return "permission denied while opening /etc/worker2/config", nil
+		case "ss -ltnp":
+			return "State Recv-Q Send-Q Local Address:Port Peer Address:Port Process", nil
+		default:
+			t.Fatalf("unexpected cmd %q", cmd)
+			return "", nil
+		}
+	})
+	if err != nil {
+		t.Fatalf("observeManyWithRunner() error = %v", err)
+	}
+	if len(commands) != 2 || len(responses) != 2 {
+		t.Fatalf("commands=%d responses=%d", len(commands), len(responses))
+	}
+	if !strings.HasPrefix(seen[0], "journalctl -u ") || seen[1] != "ss -ltnp" {
+		t.Fatalf("seen = %#v", seen)
+	}
+}
