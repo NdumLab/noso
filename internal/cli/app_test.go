@@ -183,6 +183,9 @@ func TestRunIncidentIngest(t *testing.T) {
 	if !strings.Contains(stdout.String(), "service=api") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "Target: api (kubernetes-service, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
 }
 
 func TestRunIncidentIngestFromInputFile(t *testing.T) {
@@ -213,6 +216,83 @@ func TestRunIncidentIngestFromInputFile(t *testing.T) {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "namespace=prod") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+}
+
+func TestRunIncidentIngestCorrelatesByLabels(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	first := []string{
+		"incident-ingest",
+		"--query", "api availability alert",
+		"--source", "alertmanager",
+		"--severity", "critical",
+		"--summary", "API error rate above threshold",
+		"--label", "cluster=prod-a",
+		"--label", "namespace=prod",
+		"--label", "service=api",
+		"--label", "alertname=APIAvailability",
+	}
+	code, err := Run(first, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("first ingest code=%d err=%v", code, err)
+	}
+
+	stdout.Reset()
+	second := []string{
+		"incident-ingest",
+		"--query", "api latency alert",
+		"--source", "alertmanager",
+		"--severity", "warning",
+		"--summary", "API latency above threshold",
+		"--label", "cluster=prod-a",
+		"--label", "namespace=prod",
+		"--label", "service=api",
+		"--label", "alertname=APIAvailability",
+	}
+	code, err = Run(second, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("second ingest code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "Alert count: 2") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+
+	state, err := incident.LoadState(incidentPath)
+	if err != nil {
+		t.Fatalf("LoadState() error = %v", err)
+	}
+	if len(state.Incidents) != 1 {
+		t.Fatalf("len(Incidents) = %d, want 1", len(state.Incidents))
+	}
+}
+
+func TestRunIncidentIngestSeedsPodTargeting(t *testing.T) {
+	incidentPath := filepath.Join(t.TempDir(), "incident-state.json")
+	t.Setenv("NOSO_INCIDENT_STATE_PATH", incidentPath)
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	code, err := Run([]string{
+		"incident-ingest",
+		"--query", "worker pod alert",
+		"--source", "alertmanager",
+		"--severity", "critical",
+		"--summary", "Worker pod is crashing",
+		"--label", "namespace=prod",
+		"--label", "pod=worker-2",
+	}, strings.NewReader(""), stdout, stderr)
+	if err != nil || code != ExitOK {
+		t.Fatalf("Run() code=%d err=%v", code, err)
+	}
+	if !strings.Contains(stdout.String(), "Target: worker-2 (kubernetes, namespace prod)") {
+		t.Fatalf("stdout = %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "Last command: kubectl describe pod -n prod worker-2") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 }

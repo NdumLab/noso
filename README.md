@@ -371,6 +371,10 @@ Supported payloads:
 - native `noso` alert JSON using the `query`, `source`, `severity`, `summary`, `fingerprint`, and `labels` fields
 - an Alertmanager-style envelope with `alerts`, `commonLabels`, and `commonAnnotations`
 
+Incident ingest now also performs simple correlation-aware dedup. When alerts share the same source plus workload labels like `cluster`, `namespace`, `service`, `deployment`, `pod`, `host`, `instance`, `job`, or `alertname`, `noso` folds them into the same incident and increments the incident’s alert count instead of opening a parallel duplicate record for every slightly different alert summary.
+
+Incident ingest now also promotes workload labels into incident targeting. If an alert already names a `pod`, `deployment`, `service`, `persistentvolumeclaim`/`pvc`, `secret`, `configmap`, `node`, `host`, or `instance`, the incident opens with that active target and an initial read-only probe such as `kubectl describe pod ...` or `kubectl describe service ...` already queued for `incident-observe`.
+
 `incident-observe` is the first policy-controlled execution surface in `noso`. It only runs explicit, low-risk, read-only probes from the incident’s queued next steps, and it refuses mutation-oriented commands even if they appear in the incident guidance. Today that allowlist covers observation commands such as `systemctl status`, `journalctl -u`, `docker|podman ps`, `docker|podman logs`, `kubectl get|describe|logs`, `dig`, `nslookup`, `nc -vz`, and `ss -ltnp`.
 
 You can also let it advance through multiple approved probes in one pass:

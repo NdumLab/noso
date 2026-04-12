@@ -23,8 +23,14 @@ func RenderStatus(record Record, asJSON bool) (string, error) {
 	if record.Source != "" {
 		fmt.Fprintf(&b, "Source: %s\n", record.Source)
 	}
+	if record.AlertCount > 0 {
+		fmt.Fprintf(&b, "Alert count: %d\n", record.AlertCount)
+	}
 	if record.Severity != "" {
 		fmt.Fprintf(&b, "Severity: %s\n", record.Severity)
+	}
+	if record.CorrelationKey != "" {
+		fmt.Fprintf(&b, "Correlation key: %s\n", record.CorrelationKey)
 	}
 	fmt.Fprintf(&b, "Started: %s\n", record.StartedAt)
 	fmt.Fprintf(&b, "Updated: %s\n", record.UpdatedAt)

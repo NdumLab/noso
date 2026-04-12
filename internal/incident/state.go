@@ -16,29 +16,31 @@ type State struct {
 }
 
 type Record struct {
-	ID           string            `json:"id"`
-	Query        string            `json:"query"`
-	Status       string            `json:"status"`
-	Source       string            `json:"source,omitempty"`
-	Severity     string            `json:"severity,omitempty"`
-	Summary      string            `json:"summary,omitempty"`
-	Fingerprint  string            `json:"fingerprint,omitempty"`
-	Labels       map[string]string `json:"labels,omitempty"`
-	StartedAt    string            `json:"started_at"`
-	UpdatedAt    string            `json:"updated_at"`
-	ResolvedAt   string            `json:"resolved_at,omitempty"`
-	Resolution   string            `json:"resolution,omitempty"`
-	ActiveFamily string            `json:"active_family,omitempty"`
-	ActiveTarget string            `json:"active_target,omitempty"`
-	Namespace    string            `json:"namespace,omitempty"`
-	LastIntentID string            `json:"last_intent_id,omitempty"`
-	LastCommand  string            `json:"last_command,omitempty"`
-	LastSummary  string            `json:"last_summary,omitempty"`
-	LikelyCauses []string          `json:"likely_causes,omitempty"`
-	LastFindings []string          `json:"last_findings,omitempty"`
-	LastWarnings []string          `json:"last_warnings,omitempty"`
-	NextSteps    []string          `json:"next_steps,omitempty"`
-	ProbeHistory []ProbeRecord     `json:"probe_history,omitempty"`
+	ID             string            `json:"id"`
+	Query          string            `json:"query"`
+	Status         string            `json:"status"`
+	Source         string            `json:"source,omitempty"`
+	Severity       string            `json:"severity,omitempty"`
+	Summary        string            `json:"summary,omitempty"`
+	Fingerprint    string            `json:"fingerprint,omitempty"`
+	CorrelationKey string            `json:"correlation_key,omitempty"`
+	AlertCount     int               `json:"alert_count,omitempty"`
+	Labels         map[string]string `json:"labels,omitempty"`
+	StartedAt      string            `json:"started_at"`
+	UpdatedAt      string            `json:"updated_at"`
+	ResolvedAt     string            `json:"resolved_at,omitempty"`
+	Resolution     string            `json:"resolution,omitempty"`
+	ActiveFamily   string            `json:"active_family,omitempty"`
+	ActiveTarget   string            `json:"active_target,omitempty"`
+	Namespace      string            `json:"namespace,omitempty"`
+	LastIntentID   string            `json:"last_intent_id,omitempty"`
+	LastCommand    string            `json:"last_command,omitempty"`
+	LastSummary    string            `json:"last_summary,omitempty"`
+	LikelyCauses   []string          `json:"likely_causes,omitempty"`
+	LastFindings   []string          `json:"last_findings,omitempty"`
+	LastWarnings   []string          `json:"last_warnings,omitempty"`
+	NextSteps      []string          `json:"next_steps,omitempty"`
+	ProbeHistory   []ProbeRecord     `json:"probe_history,omitempty"`
 }
 
 type Alert struct {
@@ -48,6 +50,14 @@ type Alert struct {
 	Summary     string            `json:"summary,omitempty"`
 	Fingerprint string            `json:"fingerprint,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
+}
+
+type targetSeed struct {
+	Family    string
+	Target    string
+	Namespace string
+	Command   string
+	NextSteps []string
 }
 
 type ProbeRecord struct {
@@ -160,34 +170,46 @@ func UpsertAlert(state State, alert Alert) State {
 		query = strings.TrimSpace(alert.Summary)
 	}
 	id := normalizeAlertIdentity(alert, query)
+	correlationKey := normalizeCorrelationKey(alert)
+	seed := inferTargetSeed(alert)
 	record := Record{
-		ID:          id,
-		Query:       query,
-		Status:      "open",
-		Source:      strings.TrimSpace(alert.Source),
-		Severity:    normalizeSeverity(alert.Severity),
-		Summary:     strings.TrimSpace(alert.Summary),
-		Fingerprint: strings.TrimSpace(alert.Fingerprint),
-		Labels:      cloneLabels(alert.Labels),
-		StartedAt:   now,
-		UpdatedAt:   now,
-		LastSummary: strings.TrimSpace(alert.Summary),
+		ID:             id,
+		Query:          query,
+		Status:         "open",
+		Source:         strings.TrimSpace(alert.Source),
+		Severity:       normalizeSeverity(alert.Severity),
+		Summary:        strings.TrimSpace(alert.Summary),
+		Fingerprint:    strings.TrimSpace(alert.Fingerprint),
+		CorrelationKey: correlationKey,
+		AlertCount:     1,
+		Labels:         cloneLabels(alert.Labels),
+		StartedAt:      now,
+		UpdatedAt:      now,
+		LastSummary:    strings.TrimSpace(alert.Summary),
+		ActiveFamily:   seed.Family,
+		ActiveTarget:   seed.Target,
+		Namespace:      seed.Namespace,
+		LastCommand:    seed.Command,
+		NextSteps:      append([]string{}, seed.NextSteps...),
 	}
 	replaced := false
 	for i, existing := range state.Incidents {
-		if existing.ID != id && normalizeKey(existing.Query) != normalizeKey(query) {
+		if existing.ID != id &&
+			normalizeKey(existing.Query) != normalizeKey(query) &&
+			(existing.CorrelationKey == "" || existing.CorrelationKey != correlationKey) {
 			continue
 		}
 		record.StartedAt = existing.StartedAt
-		record.ActiveFamily = existing.ActiveFamily
-		record.ActiveTarget = existing.ActiveTarget
-		record.Namespace = existing.Namespace
+		record.AlertCount = existing.AlertCount + 1
+		record.ActiveFamily = coalesce(seed.Family, existing.ActiveFamily)
+		record.ActiveTarget = coalesce(seed.Target, existing.ActiveTarget)
+		record.Namespace = coalesce(seed.Namespace, existing.Namespace)
 		record.LastIntentID = existing.LastIntentID
-		record.LastCommand = existing.LastCommand
+		record.LastCommand = coalesce(seed.Command, existing.LastCommand)
 		record.LikelyCauses = append([]string{}, existing.LikelyCauses...)
 		record.LastFindings = append([]string{}, existing.LastFindings...)
 		record.LastWarnings = append([]string{}, existing.LastWarnings...)
-		record.NextSteps = append([]string{}, existing.NextSteps...)
+		record.NextSteps = mergeSeedSteps(existing.NextSteps, seed.NextSteps)
 		record.ProbeHistory = append([]ProbeRecord{}, existing.ProbeHistory...)
 		record.Resolution = existing.Resolution
 		record.ResolvedAt = existing.ResolvedAt
@@ -275,11 +297,30 @@ func normalizeAlertIdentity(alert Alert, query string) string {
 	if fp := normalizeKey(alert.Fingerprint); fp != "" {
 		return fp
 	}
+	if correlation := normalizeCorrelationKey(alert); correlation != "" {
+		return correlation
+	}
 	parts := []string{
 		normalizeKey(alert.Source),
 		normalizeKey(query),
 	}
 	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func normalizeCorrelationKey(alert Alert) string {
+	labels := alert.Labels
+	keys := []string{"cluster", "namespace", "service", "deployment", "pod", "host", "instance", "job", "alertname"}
+	parts := []string{normalizeKey(alert.Source)}
+	for _, key := range keys {
+		if value := normalizeKey(labels[key]); value != "" {
+			parts = append(parts, key+"="+value)
+		}
+	}
+	correlation := strings.TrimSpace(strings.Join(parts, "|"))
+	if correlation == "" || correlation == "|" {
+		return ""
+	}
+	return correlation
 }
 
 func cloneLabels(in map[string]string) map[string]string {
@@ -291,4 +332,168 @@ func cloneLabels(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func inferTargetSeed(alert Alert) targetSeed {
+	labels := alert.Labels
+	namespace := firstLabel(labels, "namespace")
+	switch {
+	case firstLabel(labels, "pod") != "":
+		target := firstLabel(labels, "pod")
+		return targetSeed{
+			Family:    "kubernetes",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("pod", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent pod events.",
+				"Evidence follow-up: Run `" + kubectlLogsCommand(namespace, target) + "` to inspect recent pod logs.",
+			},
+		}
+	case firstLabel(labels, "deployment") != "":
+		target := firstLabel(labels, "deployment")
+		return targetSeed{
+			Family:    "kubernetes-deployment",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("deployment", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlGetPodsCommand(namespace) + "` to inspect the current workload pods.",
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent deployment-related events.",
+			},
+		}
+	case firstLabel(labels, "service") != "":
+		target := firstLabel(labels, "service")
+		return targetSeed{
+			Family:    "kubernetes-service",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("service", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlGetPodsCommand(namespace) + "` to inspect pods behind the affected service.",
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent service-related events.",
+			},
+		}
+	case firstLabel(labels, "persistentvolumeclaim", "pvc") != "":
+		target := firstLabel(labels, "persistentvolumeclaim", "pvc")
+		return targetSeed{
+			Family:    "kubernetes-pvc",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("pvc", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent storage-related events.",
+			},
+		}
+	case firstLabel(labels, "secret") != "":
+		target := firstLabel(labels, "secret")
+		return targetSeed{
+			Family:    "kubernetes-secret",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("secret", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent reference or mount failures.",
+			},
+		}
+	case firstLabel(labels, "configmap") != "":
+		target := firstLabel(labels, "configmap")
+		return targetSeed{
+			Family:    "kubernetes-configmap",
+			Target:    target,
+			Namespace: namespace,
+			Command:   kubectlDescribeCommand("configmap", namespace, target),
+			NextSteps: []string{
+				"Evidence follow-up: Run `" + kubectlEventsCommand(namespace) + "` to inspect recent workload reference failures.",
+			},
+		}
+	case firstLabel(labels, "node") != "":
+		target := firstLabel(labels, "node")
+		return targetSeed{
+			Family:  "kubernetes-node",
+			Target:  target,
+			Command: kubectlDescribeNodeCommand(target),
+		}
+	case firstLabel(labels, "host", "instance") != "":
+		target := firstLabel(labels, "host", "instance")
+		return targetSeed{
+			Family: "host",
+			Target: target,
+		}
+	default:
+		return targetSeed{}
+	}
+}
+
+func firstLabel(labels map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value := strings.TrimSpace(labels[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func coalesce(preferred, fallback string) string {
+	if strings.TrimSpace(preferred) != "" {
+		return strings.TrimSpace(preferred)
+	}
+	return strings.TrimSpace(fallback)
+}
+
+func mergeSeedSteps(existing, seed []string) []string {
+	if len(existing) == 0 && len(seed) == 0 {
+		return nil
+	}
+	merged := make([]string, 0, len(existing)+len(seed))
+	seen := map[string]bool{}
+	for _, group := range [][]string{seed, existing} {
+		for _, step := range group {
+			step = strings.TrimSpace(step)
+			if step == "" || seen[step] {
+				continue
+			}
+			seen[step] = true
+			merged = append(merged, step)
+		}
+	}
+	return merged
+}
+
+func kubectlDescribeCommand(kind, namespace, target string) string {
+	command := "kubectl describe " + strings.TrimSpace(kind)
+	if strings.TrimSpace(namespace) != "" {
+		command += " -n " + strings.TrimSpace(namespace)
+	}
+	command += " " + strings.TrimSpace(target)
+	return strings.TrimSpace(command)
+}
+
+func kubectlDescribeNodeCommand(target string) string {
+	return strings.TrimSpace("kubectl describe node " + strings.TrimSpace(target))
+}
+
+func kubectlGetPodsCommand(namespace string) string {
+	command := "kubectl get pods"
+	if strings.TrimSpace(namespace) != "" {
+		command += " -n " + strings.TrimSpace(namespace)
+	}
+	return strings.TrimSpace(command)
+}
+
+func kubectlEventsCommand(namespace string) string {
+	command := "kubectl get events --sort-by=.metadata.creationTimestamp"
+	if strings.TrimSpace(namespace) != "" {
+		command += " -n " + strings.TrimSpace(namespace)
+	}
+	return strings.TrimSpace(command)
+}
+
+func kubectlLogsCommand(namespace, target string) string {
+	command := "kubectl logs"
+	if strings.TrimSpace(namespace) != "" {
+		command += " -n " + strings.TrimSpace(namespace)
+	}
+	command += " " + strings.TrimSpace(target) + " --tail=100"
+	return strings.TrimSpace(command)
 }

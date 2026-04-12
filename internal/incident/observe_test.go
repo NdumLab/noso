@@ -38,6 +38,23 @@ func TestNextObserveCommandPrefersUnreadApprovedProbe(t *testing.T) {
 	}
 }
 
+func TestNextObserveCommandFallsBackToSeededLastCommand(t *testing.T) {
+	record := Record{
+		Query:        "worker pod alert",
+		ActiveFamily: "kubernetes",
+		ActiveTarget: "worker-2",
+		Namespace:    "prod",
+		LastCommand:  "kubectl describe pod -n prod worker-2",
+	}
+	command, err := NextObserveCommand(record)
+	if err != nil {
+		t.Fatalf("NextObserveCommand() error = %v", err)
+	}
+	if command != "kubectl describe pod -n prod worker-2" {
+		t.Fatalf("command = %q", command)
+	}
+}
+
 func TestObserveNextWithRunner(t *testing.T) {
 	record := Record{
 		Query:       "why is worker 2 not up?",

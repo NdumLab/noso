@@ -156,6 +156,21 @@ func TestUpsertAlertCreatesIncident(t *testing.T) {
 	if record.Labels["service"] != "api" {
 		t.Fatalf("Labels = %#v", record.Labels)
 	}
+	if record.AlertCount != 1 {
+		t.Fatalf("AlertCount = %d, want 1", record.AlertCount)
+	}
+	if record.CorrelationKey == "" {
+		t.Fatal("expected correlation key to be populated")
+	}
+	if record.ActiveFamily != "kubernetes-service" || record.ActiveTarget != "api" || record.Namespace != "prod" {
+		t.Fatalf("targeting = %#v", record)
+	}
+	if record.LastCommand != "kubectl describe service -n prod api" {
+		t.Fatalf("LastCommand = %q", record.LastCommand)
+	}
+	if len(record.NextSteps) == 0 {
+		t.Fatal("expected seeded next steps for a service-labelled alert")
+	}
 }
 
 func TestUpsertAlertReopensResolvedIncident(t *testing.T) {
@@ -183,5 +198,71 @@ func TestUpsertAlertReopensResolvedIncident(t *testing.T) {
 	}
 	if record.Resolution != "" || record.ResolvedAt != "" {
 		t.Fatalf("Record = %#v", record)
+	}
+}
+
+func TestUpsertAlertCorrelatesByLabelsWhenQueryDiffers(t *testing.T) {
+	state := UpsertAlert(State{}, Alert{
+		Query:    "api availability alert",
+		Source:   "alertmanager",
+		Severity: "critical",
+		Summary:  "API error rate above threshold",
+		Labels: map[string]string{
+			"cluster":   "prod-a",
+			"namespace": "prod",
+			"service":   "api",
+			"alertname": "APIAvailability",
+		},
+	})
+	state = UpsertAlert(state, Alert{
+		Query:    "api latency alert",
+		Source:   "alertmanager",
+		Severity: "warning",
+		Summary:  "API latency above threshold",
+		Labels: map[string]string{
+			"cluster":   "prod-a",
+			"namespace": "prod",
+			"service":   "api",
+			"alertname": "APIAvailability",
+		},
+	})
+	if len(state.Incidents) != 1 {
+		t.Fatalf("len(Incidents) = %d, want 1", len(state.Incidents))
+	}
+	record := state.Incidents[0]
+	if record.AlertCount != 2 {
+		t.Fatalf("AlertCount = %d, want 2", record.AlertCount)
+	}
+	if record.CorrelationKey == "" {
+		t.Fatal("expected correlation key")
+	}
+	if record.Query != "api latency alert" {
+		t.Fatalf("Query = %q, want latest correlated query", record.Query)
+	}
+	if record.ActiveFamily != "kubernetes-service" || record.ActiveTarget != "api" {
+		t.Fatalf("targeting = %#v", record)
+	}
+}
+
+func TestUpsertAlertSeedsPodTargeting(t *testing.T) {
+	state := UpsertAlert(State{}, Alert{
+		Query:    "worker pod alert",
+		Source:   "alertmanager",
+		Severity: "critical",
+		Summary:  "Worker pod is crashing",
+		Labels: map[string]string{
+			"namespace": "prod",
+			"pod":       "worker-2",
+		},
+	})
+	record := state.Incidents[0]
+	if record.ActiveFamily != "kubernetes" || record.ActiveTarget != "worker-2" || record.Namespace != "prod" {
+		t.Fatalf("targeting = %#v", record)
+	}
+	if record.LastCommand != "kubectl describe pod -n prod worker-2" {
+		t.Fatalf("LastCommand = %q", record.LastCommand)
+	}
+	if len(record.NextSteps) < 2 {
+		t.Fatalf("NextSteps = %#v", record.NextSteps)
 	}
 }
