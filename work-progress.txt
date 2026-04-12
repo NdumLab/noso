@@ -636,6 +636,16 @@
 ### Validation results
 - `go test ./internal/incident ./internal/cli`: OK
 
+## [2026-04-12 21:10] Incident-to-troubleshoot thread bootstrap
+- Added `internal/incident/bootstrap.go` so ingested incidents can seed a troubleshoot thread with the active family, target, namespace, initial read-only probe, discovery context, and family bias without falsely marking that probe as already executed
+- Updated `incident-ingest` to write that bootstrap thread into troubleshoot state whenever the alert opens a new incident with a concrete target
+- Updated `runTroubleshoot` so a freshly bootstrapped thread can start from the incident-seeded probe immediately instead of reclassifying raw alert text from scratch
+- Added coverage proving pod-labeled alerts create troubleshoot threads and that a later `troubleshoot` call reuses the seeded `kubectl describe pod -n prod worker-2` probe
+- Updated the README incident section to document the direct incident-to-troubleshoot flow
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+
 ## [2026-04-12 18:12] Kubernetes owner-object adoption and CI hardening
 - Completed the in-flight event-owner path so `kubectl get events` owner references for Deployments and Services now become structured troubleshoot suggestions, direct inspection responses, and stateful adopted targets across follow-up queries
 - Extended troubleshoot adoption, refinement, active-thread context, and direct-response handling to cover `kubernetes-deployment` and `kubernetes-service` families alongside existing pod, PVC, Secret, ConfigMap, and node flows
