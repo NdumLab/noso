@@ -259,6 +259,83 @@
 - Ran `go build ./...` and `go test ./...` successfully and validated `show selinux mode`, `show selinux status`, `show firewall rules`, `show firewall zones`, `inspect certificate /opt/noso/.cache/testdata/test.crt`, and `env`
 - Result: Phase3 security and compliance foundations are complete and validated with clean user-visible output
 
+## [2026-04-13 13:06] Began live cluster operator-trial loop
+- Restored SSH access from the EC2 workspace to `node1` through a reverse tunnel and verified the control-plane host exposes `kubectl` plus a present `~/.kube/config`
+- Confirmed the lab cluster baseline is healthy with three Ready nodes (`node1`, `node2`, `node3`) and stable system pods before injecting any failures
+- Reviewed the existing operator-trial assets for `k8s-crashloop-db` and `k8s-pending-taint` so live validation can reuse the repo's replayable workflow instead of ad hoc testing
+- Next step: build `cli-helper`, run the first Kubernetes scenario through `incident-ingest` and `troubleshoot`, and convert any weak guidance into deterministic fixes
+
+## [2026-04-13 13:20] Closed first live Kubernetes crash-loop regression
+- Injected a controlled `prod/worker-2` CrashLoopBackOff on the lab cluster with pod logs showing `dial tcp db.prod.svc.cluster.local:5432: connect: connection refused`
+- Ran the live `incident-ingest` and `troubleshoot` workflow on `node1`; initial output correctly found the crashing pod but missed the database dependency angle, emitted an irrelevant `journalctl` follow-up, and duplicated the same `kubectl get events` command under different wording
+- Fixed log interpretation so database-looking `connection refused` endpoints now count as dependency failures, removed systemd-specific log follow-ups from Kubernetes and runtime log contexts, and deduplicated evidence follow-ups by command identity instead of raw sentence text
+- Added regression coverage in `internal/interpret`, `internal/incident`, and `internal/troubleshoot`, updated README.md for the broader database-dependency detection rule, and revalidated with `bash scripts/build.sh`, `bash scripts/test.sh`, plus a live replay on `node1`
+- Result: live output now includes pod-scoped `kubectl exec` DNS and socket checks for `db.prod.svc.cluster.local:5432`, no longer suggests `journalctl`, and no longer repeats the same `kubectl get events` command
+
+## [2026-04-13 09:03] Began end-to-end QA sweep
+- Reviewed `AGENTS.md`, `work-progress.txt`, `README.md`, `docs/operator-trials.md`, and the operator-trial scenarios to align the test pass with the documented production workflow
+- Initial attempt to run `./scripts/build.sh` and `./scripts/test.sh` failed because the script files are not executable in this workspace; reran the same flows via `bash`
+- Ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with a clean build, full Go test suite, and `go vet`
+
+## [2026-04-13 09:06] Fixed incident status regression found during operator-trial QA
+- Manual replay of `k8s-crashloop-db` and `k8s-pending-taint` found that `incident-status` and `incident-history` replaced useful alert summaries with generic bootstrap text after a troubleshoot turn
+- Fixed `internal/incident` state updates so troubleshoot responses merge back into existing incidents by query as well as ID, and preserve stronger incident summaries when follow-up responses only add weak bootstrap text or tool-availability warnings
+- Added regression coverage in `internal/incident/state_test.go` and `internal/incident/observe_test.go`, ran `bash scripts/build.sh` and `bash scripts/test.sh`, and reran the affected operator-trial flows; result now keeps summaries like `worker pod is crash looping after startup` and `web pod is pending because the scheduler cannot place it`
+
+## [2026-04-13 09:07] Completed end-to-end QA sweep and documentation correction
+- Manually validated `cli-helper --help`, `version`, `env`, `doctor`, ask mode, quiet output, JSON output, `interpret`, `completion bash`, `history`, `runbook`, `troubleshoot-history`, `incident-resolve`, and resolved `incident-history`
+- Replayed documented operator-trial flows for `service-missing`, `k8s-crashloop-db`, and `k8s-pending-taint` with isolated session state under `trials/sessions/`
+- Found that the README examples showed `doctor --json`, `env --json`, and `history --json`, but the CLI accepts `--json` as a global flag before the subcommand; updated `README.md` to use `cli-helper --json doctor`, `cli-helper --json env`, and `cli-helper --json history`
+- Residual QA note: repeated troubleshoot turns still accumulate duplicated `Previous finding:` and `previous thread warning:` prefixes in long-running ambiguous threads; no code change for that behavior was made in this pass
+
+## [2026-04-13 09:09] Second end-to-end QA rerun and thread-readability fix
+- Re-ran `bash scripts/build.sh`, `bash scripts/test.sh`, and manual CLI checks for `--help`, `env`, `doctor`, `interpret`, and `--json history` using fresh isolated audit and state paths
+- Replayed `service-missing` and `k8s-crashloop-db` operator-trial flows again and confirmed the prior incident-summary fix still holds
+- Reproduced the remaining readability issue in repeated `troubleshoot` turns where historical findings and warnings kept their `Previous finding:` and `previous thread warning:` markers in persisted thread state
+- Fixed `internal/troubleshoot/state.go` so stored troubleshoot state is canonicalized before persistence and added regression coverage in `internal/troubleshoot/state_test.go`
+- Rebuilt, reran the full test suite, and revalidated the repeated `service-missing` flow; result no longer nests historical prefixes across turns
+
+## [2026-04-13 09:11] Third end-to-end QA rerun and troubleshoot-history summary fix
+- Re-ran `bash scripts/build.sh`, `bash scripts/test.sh`, and fresh-state manual checks for `--json history`, ask mode, runbook generation, repeated `service-missing`, and `k8s-pending-taint`
+- Found one remaining user-visible issue: `troubleshoot-history` still rendered some later entries with inherited `Previous finding:` summaries even when the same record contained fresher current-turn evidence
+- Fixed `internal/troubleshoot/history.go` to prefer current findings or warnings over inherited summary text when rendering history, and added regression coverage in `internal/troubleshoot/history_test.go`
+- One intermediate compile failure (`internal/troubleshoot/state.go: missing return`) was introduced during the summary-selection tweak, then fixed immediately before re-running build and tests
+- Final validation passed: `bash scripts/build.sh`, `bash scripts/test.sh`, and the repeated `service-missing` flow now show `podman ps -a` history summarized as runtime evidence instead of inherited service text
+
+## [2026-04-13 09:12] Fourth end-to-end QA rerun
+- Re-ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with clean build, full Go test suite, and `go vet`
+- Validated fresh-state `doctor` and `cli-helper --json history --limit 1`; empty history correctly renders as `null` in JSON mode before any queries are recorded
+- Replayed repeated `service-missing` with three troubleshoot turns plus `troubleshoot-history` and `incident-status`; result still advances through service -> runtime -> socket checks without regressing the incident summary
+- Replayed `k8s-crashloop-db` ingest plus troubleshoot and incident history; result still preserves the alert-backed pod summary and trial metadata
+- No new user-visible defects were found in this rerun
+
+## [2026-04-13 09:15] Deep QA sweep and operator-session collision fix
+- Ran a deeper manual matrix across `--json env`, `--json doctor`, quiet ask mode, `interpret`, `completion zsh`, empty `incident-history`, `llm-log` without configuration, invalid `incident-observe`, invalid `interpret`, JSON `runbook`, troubleshoot reset, incident resolve, and the documented `service-missing`, `k8s-crashloop-db`, and `k8s-pending-taint` operator-trial flows with isolated session state
+- Reproduced a real helper-script defect: parallel `scripts/start-operator-trial-session.sh` runs for the same operator in the same second all emitted the same session ID and shared one `trials/sessions/` directory
+- Fixed `scripts/start-operator-trial-session.sh` so it detects an existing target directory and appends `-2`, `-3`, and higher suffixes to preserve unique session directories under same-second starts
+- Re-ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with clean build, full Go test suite, and `go vet`
+- Revalidated the collision case with three parallel starts for `same-op-deep`; result now creates `20260413T091456Z-same-op-deep`, `...-2`, and `...-3` as distinct sessions
+- Residual QA note from observed output: the third `service-missing` `troubleshoot-history` entry for `ss -ltnp` still summarizes using inherited prior evidence because that probe has no dedicated interpreter and contributes no newer finding of its own
+
+## [2026-04-13 09:17] Follow-up QA rerun and residual troubleshoot-history fix
+- Re-ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with clean build, full Go test suite, and `go vet`
+- Reproduced the residual `service-missing` issue directly: the third `troubleshoot-history` entry for `ss -ltnp` summarized with inherited prior evidence instead of current-turn context
+- Fixed `internal/troubleshoot/state.go` so probe summaries only use non-historical findings or warnings; when a turn only carries inherited context, the summary now falls back to current explanation text instead of stale prior evidence
+- Updated `internal/troubleshoot/history.go` to use the same non-historical summary preference and added regression coverage in `internal/troubleshoot/history_test.go`
+- Revalidated the repeated `service-missing` flow; result now renders the third `ss -ltnp` history summary as current-turn ambiguity guidance instead of inherited service evidence
+
+## [2026-04-13 09:18] Verification rerun after deep QA fixes
+- Re-ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with clean build, full Go test suite, and `go vet`
+- Revalidated repeated `service-missing` with three troubleshoot turns plus `troubleshoot-history` and `incident-status`; result still shows the third `ss -ltnp` history summary as current-turn ambiguity guidance
+- Revalidated operator-session uniqueness by starting the same `service-missing` session twice for `same-op-verify`; result created distinct session IDs `20260413T091805Z-same-op-verify` and `20260413T091805Z-same-op-verify-2`
+- No new user-visible defects were found in this rerun
+
+## [2026-04-13 09:18] Additional verification rerun
+- Re-ran `bash scripts/build.sh` and `bash scripts/test.sh`; result passed with clean build, full Go test suite, and `go vet`
+- Revalidated repeated `service-missing` again with three troubleshoot turns plus `troubleshoot-history` and `incident-status`; result remained stable and the third `ss -ltnp` history entry still summarizes with current-turn ambiguity guidance
+- Revalidated operator-session uniqueness again by starting the same `service-missing` session twice for `same-op-verify2`; result created distinct session IDs `20260413T091844Z-same-op-verify2` and `20260413T091844Z-same-op-verify2-2`
+- No new user-visible defects were found in this rerun
+
 ## [2026-04-10 19:48] Phase3 Milestone 4 plan
 - Add hardware diagnostics and GPU or AI infrastructure foundations with safe inspection-first support for CPU, memory, block devices, firmware or system identity, disk health tooling when present, and NVIDIA GPU visibility when available
 - Keep this milestone read-only and avoid any tuning, firmware changes, disk mutation, or GPU state changes by default
@@ -627,6 +704,88 @@
 - `staticcheck ./...`: OK
 - `NOSO_LLM_LOG_PATH=<tmp> cli-helper llm-log --stats`: OK
 
+## [2026-04-13 20:24] Kubernetes endpoint reachability evidence
+- Added kubeconfig parsing in `internal/detect` so `cli-helper env` can surface the current kube context and API server URL even when `kubectl` is not installed
+- Extended `cli-helper doctor` to probe the kube API endpoint from kubeconfig and warn when the control-plane server is unreachable from the current host
+- Added parser, doctor, and render tests covering kube context extraction, kube server extraction, reachable or unreachable API probing, and environment rendering
+
+### Validation results
+- `GOCACHE=/opt/noso/.cache/go/build GOMODCACHE=/opt/noso/.cache/go/mod ./.tools/go/bin/go test ./internal/detect ./internal/doctor ./internal/output`: OK
+- `GOCACHE=/opt/noso/.cache/go/build GOMODCACHE=/opt/noso/.cache/go/mod ./.tools/go/bin/go test ./...`: OK
+- `bash scripts/build.sh`: OK
+- `KUBECONFIG=/opt/noso/.cache/kubeadm-virtualbox.config ./bin/cli-helper env`: OK and now shows `KubeServer: https://192.168.56.101:6443`
+- `KUBECONFIG=/opt/noso/.cache/kubeadm-virtualbox.config ./bin/cli-helper doctor`: OK and now warns `kubernetes api server is unreachable: dial tcp 192.168.56.101:6443: i/o timeout`
+
+## [2026-04-13 01:53] Validation script portability fix
+- Updated `scripts/build.sh` to default Go build and module caches to workspace-local paths under `.cache/go` and to export the selected Go toolchain directory into `PATH`
+- Updated `scripts/test.sh` with the same local cache setup and a CGO-aware fallback so environments without race-detector support still run `go test -cover ./...` and `go vet ./...`
+- Result: the repo's documented validation entrypoints now work with the bundled toolchain in this sandbox instead of failing on an unwritable home cache or a missing `go` binary on `PATH`
+
+### Validation results
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+- `./bin/cli-helper --help`: OK
+
+## [2026-04-13 02:25] Scenario-driven outage regression harness
+- Added `internal/troubleshoot/scenario_test.go` with replayable scenario coverage for three representative outage classes: missing systemd unit that pivots to runtime inspection on repeat, Kubernetes CrashLoopBackOff with downstream database-connectivity evidence, and Kubernetes scheduling failure with node-level follow-up guidance
+- Hardened troubleshoot cause scoring so stateful likely-cause ranking now also learns from derived evidence phrases and next-step signals such as database-connectivity diagnostics and scheduler-capacity or taint guidance
+- Fixed a user-visible state carry-forward bug in `ApplyThreadContext` so repeated troubleshoot runs no longer stack `Previous finding:` or similar history prefixes recursively, and added regression coverage for that behavior
+- Result: Phase6 Milestone 2 now has a real scenario regression layer that can fail on branch selection, likely-cause ranking, target context retention, and follow-up probe quality instead of only on isolated parser behavior
+
+### Validation results
+- `GOCACHE=/opt/noso/.cache/go/build GOMODCACHE=/opt/noso/.cache/go/mod ./.tools/go/bin/go test ./internal/troubleshoot -run 'TestScenarioRegressions|TestApplyThreadContextDoesNotNestHistoricalPrefixes' -v`: OK
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+- `./bin/cli-helper --help`: OK
+- `./bin/cli-helper troubleshoot-reset --query "why is worker 2 not up?" && ./bin/cli-helper troubleshoot "why is worker 2 not up?"`: OK and no repeated historical prefixes in findings
+
+## [2026-04-13 02:27] Incident-state and observe-policy invariants
+- Hardened `ApplySuggestedTarget` so target adoption now clears stale suggested targets and incompatible namespace, container, and runtime context instead of carrying old object-family state into the adopted target
+- Added incident and adoption regression coverage for retiring stale incident evidence after target adoption, skipping unsafe observe steps, rejecting unsafe observe fallback commands, and preserving runtime adoption context without nil-map panics
+- Result: Phase6 Milestone 3 now has explicit invariant coverage for stale-evidence retirement, target-adoption continuity, and read-only observe-policy enforcement
+
+### Validation results
+- `GOCACHE=/opt/noso/.cache/go/build GOMODCACHE=/opt/noso/.cache/go/mod ./.tools/go/bin/go test ./internal/troubleshoot ./internal/incident -run 'TestApplySuggestedTarget|TestNextObserveCommand|TestUpdateFromTroubleshootRetiresStaleIncidentEvidenceAfterAdoption' -v`: OK
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+- `NOSO_INCIDENT_STATE_PATH=<tmp> ./bin/cli-helper incident-observe --query "why is worker 2 not up?"`: OK and refuses to run when only unsafe probes remain
+
+## [2026-04-13 02:30] Operator trial pack and feedback loop
+- Added [docs/operator-trials.md](/opt/noso/docs/operator-trials.md) to define the operator-trial workflow, capture requirements, and the default rule that trust-breaking failures must become deterministic regressions before release
+- Added a replayable trial pack under [trials/README.md](/opt/noso/trials/README.md) with scenario briefs for missing-service, crashloop-with-database-dependency, and pending-pod scheduling cases plus sample alert fixtures and a reusable feedback template
+- Added [scripts/run-operator-trial.sh](/opt/noso/scripts/run-operator-trial.sh) to generate isolated local state paths and print the exact commands for each trial scenario so sessions do not contaminate normal incident or troubleshoot state
+- Updated [README.md](/opt/noso/README.md) to point operators at the new trial workflow and assets
+- Result: Phase6 Milestone 4 now has a concrete operator-trial workflow that can be run repeatedly and feed observed failures back into scenario or invariant regressions
+
+### Validation results
+- `bash -n scripts/run-operator-trial.sh`: OK
+- `bash scripts/run-operator-trial.sh service-missing`: OK
+- `NOSO_AUDIT_LOG_PATH=<tmp> NOSO_TROUBLESHOOT_STATE_PATH=<tmp> NOSO_INCIDENT_STATE_PATH=<tmp> ./bin/cli-helper incident-ingest --input trials/fixtures/alerts/k8s-crashloop-db.json`: OK
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+
+## [2026-04-13 02:32] Trial session bootstrap workflow
+- Added [scripts/start-operator-trial-session.sh](/opt/noso/scripts/start-operator-trial-session.sh) to create timestamped trial-session directories with isolated state paths, a `session.env` file, and a copied feedback note seeded from the shared trial template
+- Added `trials/sessions/` as the default local landing area for real operator-session artifacts and updated the operator-trial docs so the recommended flow now starts from a session bootstrap instead of ad hoc manual copying
+- Result: real operator sessions can now be launched with a stable, repeatable capture structure that keeps notes and local state together for later regression work
+
+### Validation results
+- `bash -n scripts/start-operator-trial-session.sh`: OK
+- `bash scripts/start-operator-trial-session.sh service-missing sre-a`: OK
+- verified generated `trials/sessions/<timestamp>-sre-a/session.env`, `feedback.md`, and `state/`: OK
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+
+## [2026-04-13 02:15] Production hardening plan and scope freeze
+- Updated `README.md` to declare the production-hardening focus, freeze major feature expansion, define the primary incident workflow, and mark support tiers for production-target, secondary, and experimental behavior
+- Updated `README.txt` with a new Stage 6 production-hardening phase plus a concrete plan covering scope freeze, scenario regression harness work, incident state or policy hardening, operator trials, and a bounded digression budget
+- Result: the repo now has an explicit path from current feature breadth toward a production release centered on incident-aware SRE workflows instead of continued surface-area growth
+
+### Validation results
+- `bash scripts/build.sh`: OK
+- `bash scripts/test.sh`: OK
+- `./bin/cli-helper --help`: OK
+
 ## [2026-04-12 00:18] Incident ingest label-to-target promotion
 - Extended incident ingest so correlated alert labels now seed the incident target directly for pods, deployments, services, PVCs, secrets, configmaps, nodes, and hosts
 - Populated incident records with an initial read-only probe such as `kubectl describe pod ...` or `kubectl describe service ...`, plus follow-up observation steps where the label context is strong enough
@@ -642,6 +801,15 @@
 - Updated `runTroubleshoot` so a freshly bootstrapped thread can start from the incident-seeded probe immediately instead of reclassifying raw alert text from scratch
 - Added coverage proving pod-labeled alerts create troubleshoot threads and that a later `troubleshoot` call reuses the seeded `kubectl describe pod -n prod worker-2` probe
 - Updated the README incident section to document the direct incident-to-troubleshoot flow
+
+### Validation results
+- `go test ./internal/incident ./internal/cli`: OK
+
+## [2026-04-12 21:34] Correlated alert refresh for troubleshoot threads
+- Extended incident bootstrap syncing so correlated alerts now refresh an existing troubleshoot thread by shared target identity instead of only creating a bootstrap thread once
+- Renamed matching threads to the latest correlated incident query while preserving executed probes and active target context, preventing stale alert titles from owning the live troubleshoot thread
+- Updated the README incident section to document that correlated alerts keep the shared troubleshoot thread aligned with the newest incident query
+- Added focused incident and CLI coverage proving correlated `service=api` alerts collapse to one troubleshoot thread under the latest alert query
 
 ### Validation results
 - `go test ./internal/incident ./internal/cli`: OK

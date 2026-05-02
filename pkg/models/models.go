@@ -17,6 +17,7 @@ type Environment struct {
 	IsRHEL9        bool                   `json:"is_rhel9"`
 	KubeConfig     string                 `json:"kube_config,omitempty"`
 	KubeContext    string                 `json:"kube_context,omitempty"`
+	KubeServer     string                 `json:"kube_server,omitempty"`
 	Commands       map[string]CommandInfo `json:"commands"`
 }
 

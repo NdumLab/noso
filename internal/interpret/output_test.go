@@ -288,6 +288,27 @@ func TestInterpretKubectlLogsExtractsContainerHint(t *testing.T) {
 	}
 }
 
+func TestInterpretKubectlLogsDetectsDatabaseConnectivityFromConnectionRefused(t *testing.T) {
+	text := "dial tcp db.prod.svc.cluster.local:5432: connect: connection refused\n"
+	response, err := Output("kubectl logs -n prod worker-2 --tail=100", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if !strings.Contains(response.Explanation, "database connectivity errors detected") {
+		t.Fatalf("Explanation = %q", response.Explanation)
+	}
+	if !strings.Contains(combined, "dig +short db.prod.svc.cluster.local") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "nc -vz db.prod.svc.cluster.local 5432") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+	if strings.Contains(combined, "journalctl -u <service>") {
+		t.Fatalf("NextSteps should not mention journalctl for kubectl logs: %#v", response.NextSteps)
+	}
+}
+
 func TestInterpretRuntimePSDetectsExitedContainer(t *testing.T) {
 	text := "CONTAINER ID  IMAGE   COMMAND   CREATED   STATUS                     NAMES\nabc123        app     app       1m ago    Exited (1) 10 seconds ago  worker2\n"
 	response, err := Output("podman ps -a", text)
@@ -327,6 +348,21 @@ func TestInterpretRuntimeLogsDetectsDatabaseConnectivity(t *testing.T) {
 		t.Fatalf("NextSteps = %#v", response.NextSteps)
 	}
 	if !strings.Contains(combined, "nc -vz db.internal 5432") {
+		t.Fatalf("NextSteps = %#v", response.NextSteps)
+	}
+}
+
+func TestInterpretRuntimeLogsAvoidsJournalctl(t *testing.T) {
+	text := "permission denied opening /srv/data\n"
+	response, err := Output("podman logs --tail 100 worker2", text)
+	if err != nil {
+		t.Fatalf("Output() error = %v", err)
+	}
+	combined := strings.Join(response.NextSteps, " ")
+	if strings.Contains(combined, "journalctl -u <service>") {
+		t.Fatalf("NextSteps should not mention journalctl for runtime logs: %#v", response.NextSteps)
+	}
+	if !strings.Contains(combined, "podman ps -a") {
 		t.Fatalf("NextSteps = %#v", response.NextSteps)
 	}
 }

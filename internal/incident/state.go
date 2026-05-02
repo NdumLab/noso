@@ -107,6 +107,7 @@ func UpdateFromTroubleshoot(state State, thread troubleshoot.StateThread, respon
 	if id == "" {
 		id = normalizeKey(thread.Query + " " + response.IntentID)
 	}
+	lastSummary := summarize(response)
 	record := Record{
 		ID:           id,
 		Query:        thread.Query,
@@ -118,7 +119,7 @@ func UpdateFromTroubleshoot(state State, thread troubleshoot.StateThread, respon
 		Namespace:    thread.ActiveNamespace,
 		LastIntentID: response.IntentID,
 		LastCommand:  response.Command,
-		LastSummary:  summarize(response),
+		LastSummary:  lastSummary,
 		LikelyCauses: append([]string{}, response.LikelyCauses...),
 		LastFindings: append([]string{}, response.Findings...),
 		LastWarnings: append([]string{}, response.Warnings...),
@@ -127,11 +128,20 @@ func UpdateFromTroubleshoot(state State, thread troubleshoot.StateThread, respon
 	}
 
 	replaced := false
+	queryKey := normalizeKey(thread.Query)
 	for i, existing := range state.Incidents {
-		if existing.ID != id {
+		if existing.ID != id && normalizeKey(existing.Query) != queryKey {
 			continue
 		}
 		record.StartedAt = existing.StartedAt
+		record.Source = existing.Source
+		record.Severity = existing.Severity
+		record.Summary = coalesce(existing.Summary, lastSummary)
+		record.Fingerprint = existing.Fingerprint
+		record.CorrelationKey = existing.CorrelationKey
+		record.AlertCount = existing.AlertCount
+		record.Labels = cloneLabels(existing.Labels)
+		record.LastSummary = selectIncidentSummary(existing, response, lastSummary)
 		if existing.Status == "resolved" {
 			record.Status = existing.Status
 			record.ResolvedAt = existing.ResolvedAt
@@ -278,6 +288,24 @@ func summarize(response models.Response) string {
 	default:
 		return ""
 	}
+}
+
+func selectIncidentSummary(existing Record, response models.Response, candidate string) string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return strings.TrimSpace(coalesce(existing.LastSummary, existing.Summary))
+	}
+	if incidentSummaryIsWeak(response) {
+		if prior := strings.TrimSpace(coalesce(existing.LastSummary, existing.Summary)); prior != "" {
+			return prior
+		}
+	}
+	return candidate
+}
+
+func incidentSummaryIsWeak(response models.Response) bool {
+	return len(response.LikelyCauses) == 0 &&
+		len(response.Findings) == 0
 }
 
 func normalizeKey(value string) string {

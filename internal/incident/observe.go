@@ -83,7 +83,7 @@ func observeNextWithRunner(record Record, run runner) (models.Response, string, 
 	response.ExpectedOutput = interpreted.ExpectedOutput
 	response.Findings = append([]string{}, interpreted.Findings...)
 	response.VerifiedFrom = append([]string{}, "live:"+command)
-	response.NextSteps = append([]string{}, interpreted.NextSteps...)
+	response.NextSteps = dedupeSteps(interpreted.NextSteps)
 	response.ContainerHint = interpreted.ContainerHint
 	if strings.TrimSpace(output) == "" {
 		response.Warnings = append(response.Warnings, "incident observe produced no output")
@@ -191,9 +191,10 @@ func extractBacktickCommand(step string) string {
 
 func applyObservedResponse(record Record, response models.Response) Record {
 	previousSteps := append([]string{}, record.NextSteps...)
+	lastSummary := summarize(response)
 	record.LastIntentID = response.IntentID
 	record.LastCommand = response.Command
-	record.LastSummary = summarize(response)
+	record.LastSummary = selectIncidentSummary(record, response, lastSummary)
 	record.LikelyCauses = append([]string{}, response.LikelyCauses...)
 	record.LastFindings = append([]string{}, response.Findings...)
 	record.LastWarnings = append([]string{}, response.Warnings...)
@@ -201,7 +202,7 @@ func applyObservedResponse(record Record, response models.Response) Record {
 	record.ProbeHistory = append([]ProbeRecord{{
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Command:   response.Command,
-		Summary:   summarize(response),
+		Summary:   lastSummary,
 		Findings:  append([]string{}, response.Findings...),
 		Warnings:  append([]string{}, response.Warnings...),
 	}}, record.ProbeHistory...)
@@ -229,4 +230,18 @@ func mergeNextSteps(previous []string, executed string, current []string) []stri
 		addStep(step)
 	}
 	return merged
+}
+
+func dedupeSteps(steps []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, step := range steps {
+		step = strings.TrimSpace(step)
+		if step == "" || seen[step] {
+			continue
+		}
+		seen[step] = true
+		out = append(out, step)
+	}
+	return out
 }

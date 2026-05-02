@@ -3,6 +3,7 @@ package detect
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/NdumLab/noso/internal/evidence"
@@ -104,6 +105,67 @@ func TestKubeConfigPathRespectsEnv(t *testing.T) {
 	}
 }
 
+func TestKubeConfigPathsRespectsEnvList(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first")
+	second := filepath.Join(dir, "second")
+	missing := filepath.Join(dir, "missing")
+	if err := os.WriteFile(first, []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(second, []byte(""), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	t.Setenv("KUBECONFIG", first+string(os.PathListSeparator)+missing+string(os.PathListSeparator)+second)
+
+	got := kubeConfigPaths()
+	if len(got) != 2 || got[0] != first || got[1] != second {
+		t.Fatalf("kubeConfigPaths() = %#v, want first and second existing paths", got)
+	}
+	if got := kubeConfigPath(); got != first {
+		t.Fatalf("kubeConfigPath() = %q, want first existing path", got)
+	}
+}
+
+func TestParseKubeConfigsMergesContextAndClusterFiles(t *testing.T) {
+	dir := t.TempDir()
+	contextPath := filepath.Join(dir, "context")
+	clusterPath := filepath.Join(dir, "cluster")
+	contextContent := `apiVersion: v1
+contexts:
+- context:
+    cluster: prod
+    user: admin
+  name: admin@prod
+current-context: admin@prod
+kind: Config
+`
+	clusterContent := `apiVersion: v1
+clusters:
+- cluster:
+    server: https://10.0.0.10:6443
+  name: prod
+kind: Config
+`
+	if err := os.WriteFile(contextPath, []byte(contextContent), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := os.WriteFile(clusterPath, []byte(clusterContent), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	details, err := parseKubeConfigs([]string{contextPath, clusterPath})
+	if err != nil {
+		t.Fatalf("parseKubeConfigs() error = %v", err)
+	}
+	if details.CurrentContext != "admin@prod" {
+		t.Fatalf("CurrentContext = %q", details.CurrentContext)
+	}
+	if details.Server != "https://10.0.0.10:6443" {
+		t.Fatalf("Server = %q", details.Server)
+	}
+}
+
 func TestKubeConfigPathNonExistentEnv(t *testing.T) {
 	t.Setenv("KUBECONFIG", "/does/not/exist/kubeconfig")
 	if got := kubeConfigPath(); got != "" {
@@ -123,6 +185,66 @@ func TestKubeContextNoKubectl(t *testing.T) {
 	got := kubeContext(collector)
 	if got != "" {
 		t.Errorf("kubeContext() = %q, want empty when kubectl is absent", got)
+	}
+}
+
+func TestParseKubeConfigExtractsCurrentContextAndServer(t *testing.T) {
+	content := `apiVersion: v1
+clusters:
+- cluster:
+    server: https://192.168.56.101:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: kubernetes-admin
+  name: kubernetes-admin@kubernetes
+current-context: kubernetes-admin@kubernetes
+kind: Config
+`
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	details, err := parseKubeConfig(path)
+	if err != nil {
+		t.Fatalf("parseKubeConfig() error = %v", err)
+	}
+	if details.CurrentContext != "kubernetes-admin@kubernetes" {
+		t.Fatalf("CurrentContext = %q", details.CurrentContext)
+	}
+	if details.Server != "https://192.168.56.101:6443" {
+		t.Fatalf("Server = %q", details.Server)
+	}
+}
+
+func TestKubeContextFallsBackToKubeConfig(t *testing.T) {
+	content := `apiVersion: v1
+clusters:
+- cluster:
+    server: https://10.0.0.10:6443
+  name: prod
+contexts:
+- context:
+    cluster: prod
+    user: admin
+  name: admin@prod
+current-context: admin@prod
+kind: Config
+`
+	path := filepath.Join(t.TempDir(), "config")
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	t.Setenv("KUBECONFIG", path)
+
+	got := kubeContext(evidence.NewCollector())
+	if got != "admin@prod" {
+		t.Fatalf("kubeContext() = %q, want admin@prod", got)
+	}
+	if server := kubeServer(path); server != "https://10.0.0.10:6443" {
+		t.Fatalf("kubeServer() = %q, want https://10.0.0.10:6443", server)
 	}
 }
 
@@ -149,6 +271,9 @@ func TestLocalReturnsNonEmpty(t *testing.T) {
 	}
 	if env.PackageManager == "" {
 		t.Error("Local().PackageManager should not be empty on a Linux host")
+	}
+	if env.KubeServer != "" && !strings.HasPrefix(env.KubeServer, "https://") {
+		t.Errorf("Local().KubeServer = %q, want https URL when populated", env.KubeServer)
 	}
 }
 

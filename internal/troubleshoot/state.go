@@ -112,10 +112,10 @@ func PreviewThread(existing StateThread, query string, response models.Response)
 		Query:            query,
 		IntentID:         response.IntentID,
 		LastCommand:      response.Command,
-		LastDiscovery:    append([]string{}, response.Discovery...),
+		LastDiscovery:    canonicalizeHistoricalEntries(response.Discovery, "Previous discovery:"),
 		SuggestedTargets: parseSuggestedTargets(response.NextSteps),
-		LastFindings:     append([]string{}, response.Findings...),
-		LastWarnings:     append([]string{}, response.Warnings...),
+		LastFindings:     canonicalizeHistoricalEntries(response.Findings, "Previous finding:"),
+		LastWarnings:     canonicalizeHistoricalEntries(response.Warnings, "previous thread warning:"),
 		FamilyScores:     map[string]float64{},
 		CauseScores:      map[string]float64{},
 	}
@@ -274,11 +274,13 @@ func AttachLikelyCauses(response models.Response, thread StateThread) models.Res
 }
 
 func summarizeProbe(response models.Response) string {
+	if finding := preferredCurrentSummaryEntry(response.Findings, "Previous finding:"); finding != "" {
+		return finding
+	}
+	if warning := preferredCurrentSummaryEntry(response.Warnings, "previous thread warning:"); warning != "" {
+		return warning
+	}
 	switch {
-	case len(response.Findings) > 0:
-		return strings.TrimSpace(response.Findings[0])
-	case len(response.Warnings) > 0:
-		return strings.TrimSpace(response.Warnings[0])
 	case strings.TrimSpace(response.Explanation) != "":
 		return strings.TrimSpace(response.Explanation)
 	case strings.TrimSpace(response.IntentID) != "":
@@ -286,6 +288,31 @@ func summarizeProbe(response models.Response) string {
 	default:
 		return ""
 	}
+}
+
+func canonicalizeHistoricalEntries(values []string, prefix string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		out = append(out, stripRepeatedHistoryPrefix(value, prefix))
+	}
+	return out
+}
+
+func preferredCurrentSummaryEntry(values []string, historicalPrefix string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if !strings.HasPrefix(strings.ToLower(value), strings.ToLower(historicalPrefix)) {
+			return value
+		}
+	}
+	return ""
 }
 
 func mergeCommandContext(thread *StateThread, command string) {
@@ -428,6 +455,7 @@ func applyCauseScoreDelta(thread *StateThread, response models.Response) {
 	}
 	lines := currentEvidenceLines(response)
 	lines = append(lines, response.Explanation)
+	lines = append(lines, response.NextSteps...)
 	text := strings.ToLower(strings.Join(lines, "\n"))
 
 	switch {
@@ -450,6 +478,12 @@ func applyCauseScoreDelta(thread *StateThread, response models.Response) {
 		adjustCauseScore(thread.CauseScores, "dependency_database_connectivity", 2.1)
 		adjustCauseScore(thread.CauseScores, "permission_or_access_denied", -0.3)
 	}
+	if strings.Contains(text, "database connectivity errors detected") ||
+		strings.Contains(text, "verify the database endpoint") ||
+		strings.Contains(text, "configured database endpoint") {
+		adjustCauseScore(thread.CauseScores, "dependency_database_connectivity", 1.8)
+		adjustCauseScore(thread.CauseScores, "permission_or_access_denied", -0.2)
+	}
 	if strings.Contains(text, "runtime container list shows non-running or unhealthy containers") {
 		adjustCauseScore(thread.CauseScores, "runtime_container_failure", 1.5)
 		adjustCauseScore(thread.CauseScores, "service_unit_missing", -0.4)
@@ -471,6 +505,16 @@ func applyCauseScoreDelta(thread *StateThread, response models.Response) {
 		adjustCauseScore(thread.CauseScores, "kubernetes_scheduling_capacity", 2.0)
 		adjustCauseScore(thread.CauseScores, "kubernetes_crashloop", -1.5)
 		adjustCauseScore(thread.CauseScores, "kubernetes_image_pull", -1.2)
+	}
+	if strings.Contains(text, "scheduler failure detected") ||
+		strings.Contains(text, "allocatable memory") ||
+		strings.Contains(text, "allocatable cpu") ||
+		strings.Contains(text, "tolerations") ||
+		strings.Contains(text, "node affinity") ||
+		strings.Contains(text, "selector rules") {
+		adjustCauseScore(thread.CauseScores, "kubernetes_scheduling_capacity", 1.8)
+		adjustCauseScore(thread.CauseScores, "kubernetes_crashloop", -1.2)
+		adjustCauseScore(thread.CauseScores, "kubernetes_image_pull", -1.0)
 	}
 	if strings.Contains(text, "all parsed pods are either running or completed") {
 		adjustCauseScore(thread.CauseScores, "kubernetes_crashloop", -1.8)

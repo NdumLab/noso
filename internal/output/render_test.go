@@ -82,6 +82,7 @@ func TestRenderEnvironmentText(t *testing.T) {
 		Distro:         "rhel",
 		PackageManager: "dnf",
 		Shell:          "/bin/bash",
+		KubeServer:     "https://192.168.56.101:6443",
 		Commands: map[string]models.CommandInfo{
 			"git":    {Exists: true, Path: "/usr/bin/git"},
 			"docker": {Exists: false},
@@ -91,7 +92,7 @@ func TestRenderEnvironmentText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderEnvironment() error = %v", err)
 	}
-	for _, want := range []string{"Distro: rhel", "Package manager: dnf", "Shell: /bin/bash"} {
+	for _, want := range []string{"Distro: rhel", "Package manager: dnf", "Shell: /bin/bash", "KubeServer: https://192.168.56.101:6443"} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("rendered env missing %q\nGot: %s", want, rendered)
 		}

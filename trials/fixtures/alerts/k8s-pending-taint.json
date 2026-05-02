@@ -1,0 +1,10 @@
+{
+  "query": "web pod pending",
+  "source": "trial-pack",
+  "severity": "warning",
+  "summary": "web pod is pending because the scheduler cannot place it",
+  "labels": {
+    "namespace": "prod",
+    "pod": "web-7c5c"
+  }
+}

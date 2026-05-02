@@ -15,6 +15,15 @@ else
     exit 1
 fi
 
+GO_BIN_DIR="$(dirname "${GO}")"
+export PATH="${GO_BIN_DIR}:${PATH}"
+
+CACHE_ROOT="${ROOT}/.cache/go"
+mkdir -p "${CACHE_ROOT}/build" "${CACHE_ROOT}/mod" "${ROOT}/bin"
+
+export GOCACHE="${GOCACHE:-${CACHE_ROOT}/build}"
+export GOMODCACHE="${GOMODCACHE:-${CACHE_ROOT}/mod}"
+
 # Inject version metadata at link time so the binary reports real values.
 VERSION="${VERSION:-dev}"
 COMMIT="${COMMIT:-$(git -C "${ROOT}" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
@@ -25,7 +34,6 @@ LDFLAGS="-X github.com/NdumLab/noso/pkg/buildinfo.Version=${VERSION} \
          -X github.com/NdumLab/noso/pkg/buildinfo.Date=${DATE}"
 
 OUT="${ROOT}/bin/cli-helper"
-mkdir -p "${ROOT}/bin"
 
 echo "Building cli-helper → ${OUT}"
 "${GO}" build -ldflags "${LDFLAGS}" -o "${OUT}" "${ROOT}/cmd/cli-helper"

@@ -56,8 +56,12 @@ func ApplySuggestedTarget(thread StateThread, suggestion SuggestedTarget) StateT
 	thread.Executed = nil
 	thread.LastDiscovery = nil
 	thread.LastFindings = nil
+	thread.SuggestedTargets = nil
 	thread.History = nil
 	thread.LastWarnings = []string{"operator adopted discovered target: " + suggestion.Name + " (" + suggestion.Family + ")"}
+	if thread.FamilyScores == nil {
+		thread.FamilyScores = map[string]float64{}
+	}
 	if thread.CauseScores == nil {
 		thread.CauseScores = map[string]float64{}
 	}
@@ -67,15 +71,19 @@ func ApplySuggestedTarget(thread StateThread, suggestion SuggestedTarget) StateT
 	thread.RuntimeHint = ""
 	switch suggestion.Family {
 	case "kubernetes":
+		thread.ActiveContainer = ""
+		thread.RuntimeHint = ""
 		thread.FamilyScores["kubernetes"] += 2.6
 		thread.FamilyScores["service"] -= 1.2
 		thread.FamilyScores["runtime"] -= 0.8
 		clearCauseScores(thread.CauseScores, "service_unit_missing", "service_process_failure", "runtime_container_failure")
 	case "runtime":
+		thread.ActiveNamespace = ""
 		thread.FamilyScores["runtime"] += 2.6
 		thread.FamilyScores["service"] -= 1.1
 		thread.FamilyScores["kubernetes"] -= 0.9
 		thread.RuntimeHint = runtimeFromSuggestedCommand(suggestion.Command)
+		thread.ActiveContainer = ""
 		clearCauseScores(thread.CauseScores, "service_unit_missing", "service_process_failure", "kubernetes_crashloop", "kubernetes_image_pull", "kubernetes_scheduling_capacity")
 	case "service":
 		thread.FamilyScores["service"] += 2.6

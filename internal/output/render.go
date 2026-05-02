@@ -89,6 +89,9 @@ func RenderEnvironment(env models.Environment, asJSON bool) (string, error) {
 	if env.KubeContext != "" {
 		fmt.Fprintf(&b, "KubeContext: %s\n", env.KubeContext)
 	}
+	if env.KubeServer != "" {
+		fmt.Fprintf(&b, "KubeServer: %s\n", env.KubeServer)
+	}
 	for _, name := range []string{
 		"dnf", "systemctl", "ss", "git", "find", "ssh", "scp", "rsync", "ssh-keyscan", "nc",
 		"docker", "podman", "containerd", "ctr", "crictl", "nerdctl",

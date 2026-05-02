@@ -579,11 +579,7 @@ func interpretGenericLogs(command string, text string) models.Response {
 	if strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection timed out") {
 		signals = append(signals, "network connection errors detected")
 	}
-	if strings.Contains(lower, "failed to connect to database") ||
-		strings.Contains(lower, "connect to database") ||
-		strings.Contains(lower, "connection to server at") ||
-		strings.Contains(lower, "sqlstate") ||
-		strings.Contains(lower, "pq: ") {
+	if isDatabaseConnectivityLog(lower, text) {
 		signals = append(signals, "database connectivity errors detected")
 	}
 	if strings.Contains(lower, "no such host") ||
@@ -614,20 +610,13 @@ func interpretGenericLogs(command string, text string) models.Response {
 	response.Explanation = fmt.Sprintf("The pasted log output contains %d signal(s): %s.",
 		len(signals), strings.Join(signals, "; "))
 	response.Confidence = "High"
-	response.NextSteps = []string{
-		"Check the lines around each error for the root cause.",
-		"Run `journalctl -u <service> -n 100 --no-pager` for more context.",
-	}
+	response.NextSteps = defaultLogContextNextSteps(command)
 	if strings.Contains(lower, "oom") || strings.Contains(lower, "killed process") {
 		response.NextSteps = append(response.NextSteps,
 			"Run `free -h` to inspect current memory state.",
 			"Run `ps aux --sort=-%mem | head` to identify memory-heavy processes.")
 	}
-	if strings.Contains(lower, "failed to connect to database") ||
-		strings.Contains(lower, "connect to database") ||
-		strings.Contains(lower, "connection to server at") ||
-		strings.Contains(lower, "sqlstate") ||
-		strings.Contains(lower, "pq: ") {
+	if isDatabaseConnectivityLog(lower, text) {
 		host := extractDependencyHost(text)
 		port := extractDependencyPort(text)
 		if host == "" {
@@ -660,6 +649,77 @@ func interpretGenericLogs(command string, text string) models.Response {
 		)
 	}
 	return response
+}
+
+func defaultLogContextNextSteps(command string) []string {
+	lower := strings.ToLower(strings.TrimSpace(command))
+	steps := []string{
+		"Check the lines around each error for the root cause.",
+	}
+	switch {
+	case strings.HasPrefix(lower, "kubectl logs"):
+		if namespace := extractNamespaceFromKubectlCommand(command); namespace != "" {
+			return append(steps, "Run `kubectl get events -n "+namespace+" --sort-by=.metadata.creationTimestamp` to inspect recent namespace-scoped scheduler, image-pull, and restart events.")
+		}
+		return append(steps, "Run `kubectl get events -A --sort-by=.metadata.creationTimestamp` to inspect recent cluster events related to the workload.")
+	case strings.HasPrefix(lower, "docker logs"), strings.HasPrefix(lower, "podman logs"):
+		runtime := "container"
+		fields := strings.Fields(command)
+		if len(fields) > 0 {
+			runtime = fields[0]
+		}
+		return append(steps, "Run `"+runtime+" ps -a` to correlate the log failure with restart state and exit codes.")
+	default:
+		return append(steps, "Run `journalctl -u <service> -n 100 --no-pager` for more context.")
+	}
+}
+
+func isDatabaseConnectivityLog(lower, text string) bool {
+	if strings.Contains(lower, "failed to connect to database") ||
+		strings.Contains(lower, "connect to database") ||
+		strings.Contains(lower, "connection to server at") ||
+		strings.Contains(lower, "sqlstate") ||
+		strings.Contains(lower, "pq: ") {
+		return true
+	}
+	if !(strings.Contains(lower, "connection refused") || strings.Contains(lower, "connection timed out")) {
+		return false
+	}
+	host := extractDependencyHost(text)
+	port := extractDependencyPort(text)
+	return looksLikeDatabaseHost(host) || looksLikeDatabasePort(port)
+}
+
+func looksLikeDatabaseHost(host string) bool {
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, marker := range []string{"db", "postgres", "mysql", "mariadb", "mongo", "redis", "sql"} {
+		if strings.Contains(host, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeDatabasePort(port string) bool {
+	switch strings.TrimSpace(port) {
+	case "1433", "1521", "27017", "3306", "5432", "5433", "6379":
+		return true
+	default:
+		return false
+	}
+}
+
+func extractNamespaceFromKubectlCommand(command string) string {
+	fields := strings.Fields(strings.TrimSpace(command))
+	for i := 0; i < len(fields)-1; i++ {
+		if fields[i] == "-n" && isKubernetesContainerName(fields[i+1]) {
+			return fields[i+1]
+		}
+	}
+	return ""
 }
 
 func extractDependencyHost(text string) string {

@@ -2,6 +2,29 @@
 
 `cli-helper` is a plain-English terminal assistant for Linux and DevOps operators. Ask it a question in natural language and it returns the right command to run — with a risk rating, confidence score, expected output, and follow-up suggestions, all sourced from your local environment rather than the network.
 
+## Production focus
+
+`noso` is now in a production-hardening phase. Major feature expansion is intentionally frozen while the project sharpens one primary operator workflow:
+
+`incident-ingest` -> `troubleshoot` -> `incident-observe` -> `incident-status` or `incident-history` -> `incident-resolve`
+
+That workflow is the path to production because it is where `noso` is most differentiated: evidence-aware outage classification, stateful follow-up guidance, and safe read-only probing.
+
+Current support tiers:
+
+- Production hardening target: incident and troubleshoot flows, incident observe policy, incident status or history, deterministic evidence interpretation, local runbook generation
+- Secondary but supported: ask mode, explain mode, doctor, env, history, llm-log
+- Experimental or depth-limited: broad cloud, database, and edge-case tool coverage outside the primary incident workflow
+
+Near-term roadmap guardrails:
+
+- Freeze major surface-area expansion until the incident workflow is hardened
+- Prefer scenario-based regression tests over new intent packs
+- Tighten state, safety, and evidence-policy invariants before adding more tools
+- Reserve a small digression budget for adjacent work only when it materially improves the primary operator workflow
+
+Operator trials are now part of that hardening path too. See [docs/operator-trials.md](/opt/noso/docs/operator-trials.md) and the replayable pack under [trials/README.md](/opt/noso/trials/README.md) for the current scenarios, feedback template, and isolated local-state workflow.
+
 ```
 $ cli-helper "what process is using port 8080"
 
@@ -114,7 +137,7 @@ Inspect your local environment for common issues and missing tools.
 
 ```bash
 cli-helper doctor
-cli-helper doctor --json
+cli-helper --json doctor
 ```
 
 ### `env` — environment snapshot
@@ -123,7 +146,7 @@ Print detected OS, package manager, shell, and tool availability.
 
 ```bash
 cli-helper env
-cli-helper env --json
+cli-helper --json env
 ```
 
 ### `history` — audit log viewer
@@ -133,7 +156,7 @@ Browse or filter past queries from the local audit log.
 ```bash
 cli-helper history
 cli-helper history --limit 20 --match kubectl
-cli-helper history --json
+cli-helper --json history
 ```
 
 ### `runbook` — generate a runbook
@@ -317,6 +340,8 @@ The evidence loop also now correlates some dependency failures across object bou
 When the logs include the concrete upstream hostname, those follow-ups now use it directly. For example, a log line mentioning `db.internal` or `api.internal` will now produce `dig +short db.internal` rather than a generic placeholder probe.
 
 When the logs also include an explicit upstream port, `troubleshoot` now carries that forward too. A message like `db.internal port 5432` now produces a concrete socket probe such as `nc -vz db.internal 5432` instead of only generic listener guidance.
+
+That dependency detection is now broader for Kubernetes and container logs too. A line like `dial tcp db.prod.svc.cluster.local:5432: connect: connection refused` now counts as a database dependency failure even if the application never says the word `database`, which lets the follow-up stay focused on pod-local DNS and upstream listener checks.
 
 Those infrastructure probes are now also specialized to the current host. If `dig` is missing but `nslookup` exists, `troubleshoot` rewrites the DNS probe accordingly. If `nc` is unavailable but the shell is `bash`, it falls back to a `</dev/tcp/...>` reachability check instead of keeping a probe the host cannot run.
 

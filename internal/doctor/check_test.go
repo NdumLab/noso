@@ -1,11 +1,13 @@
 package doctor
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NdumLab/noso/internal/config"
 	"github.com/NdumLab/noso/pkg/models"
@@ -160,5 +162,67 @@ func TestCheckWarnsForUnavailableLLMEndpoint(t *testing.T) {
 	}
 	if len(response.NextSteps) == 0 {
 		t.Fatal("expected next step for LLM issue")
+	}
+}
+
+func TestCheckWarnsForUnreachableKubeAPIServer(t *testing.T) {
+	originalProbe := kubeAPIServerProbe
+	kubeAPIServerProbe = func(server string, timeout time.Duration) error {
+		if server != "https://192.168.56.101:6443" {
+			t.Fatalf("server = %q", server)
+		}
+		return errors.New("dial tcp 192.168.56.101:6443: i/o timeout")
+	}
+	t.Cleanup(func() {
+		kubeAPIServerProbe = originalProbe
+	})
+
+	cfg := config.Config{Mode: "strict-local", AuditLogPath: filepath.Join(t.TempDir(), "audit.log")}
+	env := models.Environment{
+		OSID:        "rhel",
+		Distro:      "rhel",
+		IsRHEL9:     true,
+		KubeContext: "kubernetes-admin@kubernetes",
+		KubeServer:  "https://192.168.56.101:6443",
+		Commands:    allCoreCommandsPresent(),
+	}
+
+	response := Check(cfg, env)
+	combined := strings.Join(response.Warnings, " ")
+	if !strings.Contains(combined, "kubernetes api server is unreachable") {
+		t.Fatalf("Warnings = %v", response.Warnings)
+	}
+	if !strings.Contains(response.Explanation, "Active kube context: kubernetes-admin@kubernetes.") {
+		t.Fatalf("Explanation = %q", response.Explanation)
+	}
+	if len(response.NextSteps) == 0 {
+		t.Fatal("expected next steps for kube api reachability issue")
+	}
+}
+
+func TestCheckRecordsReachableKubeAPIServer(t *testing.T) {
+	originalProbe := kubeAPIServerProbe
+	kubeAPIServerProbe = func(server string, timeout time.Duration) error {
+		return nil
+	}
+	t.Cleanup(func() {
+		kubeAPIServerProbe = originalProbe
+	})
+
+	cfg := config.Config{Mode: "strict-local", AuditLogPath: filepath.Join(t.TempDir(), "audit.log")}
+	env := models.Environment{
+		OSID:       "rhel",
+		Distro:     "rhel",
+		IsRHEL9:    true,
+		KubeServer: "https://192.168.56.101:6443",
+		Commands:   allCoreCommandsPresent(),
+	}
+
+	response := Check(cfg, env)
+	if strings.Contains(strings.Join(response.Warnings, " "), "kubernetes api server is unreachable") {
+		t.Fatalf("Warnings = %v", response.Warnings)
+	}
+	if !strings.Contains(strings.Join(response.VerifiedFrom, " "), "kubernetes api reachability") {
+		t.Fatalf("VerifiedFrom = %v", response.VerifiedFrom)
 	}
 }

@@ -37,18 +37,26 @@ func ApplyThreadContext(response models.Response, thread StateThread) models.Res
 		}
 	}
 	for _, finding := range thread.LastFindings {
-		response.Findings = appendUnique(response.Findings, "Previous finding: "+finding)
+		response.Findings = appendUnique(response.Findings, "Previous finding: "+stripRepeatedHistoryPrefix(finding, "Previous finding:"))
 	}
 	for _, item := range thread.LastDiscovery {
 		if containsExact(response.Discovery, item) {
 			continue
 		}
-		response.Discovery = appendUnique(response.Discovery, "Previous discovery: "+item)
+		response.Discovery = appendUnique(response.Discovery, "Previous discovery: "+stripRepeatedHistoryPrefix(item, "Previous discovery:"))
 	}
 	for _, warning := range thread.LastWarnings {
-		response.Warnings = appendUnique(response.Warnings, "previous thread warning: "+warning)
+		response.Warnings = appendUnique(response.Warnings, "previous thread warning: "+stripRepeatedHistoryPrefix(warning, "previous thread warning:"))
 	}
 	return response
+}
+
+func stripRepeatedHistoryPrefix(value string, prefix string) string {
+	value = strings.TrimSpace(value)
+	for strings.HasPrefix(strings.ToLower(value), strings.ToLower(prefix)) {
+		value = strings.TrimSpace(value[len(prefix):])
+	}
+	return value
 }
 
 func enrichWithRunner(response models.Response, runner commandRunner) models.Response {
@@ -558,9 +566,27 @@ func appendEvidenceSteps(existing []string, extra ...string) []string {
 		if strings.TrimSpace(step) == "" {
 			continue
 		}
-		out = appendUnique(out, "Evidence follow-up: "+step)
+		candidate := "Evidence follow-up: " + step
+		command := extractBacktickCommand(candidate)
+		if command != "" && containsCommandStep(out, command) {
+			continue
+		}
+		out = appendUnique(out, candidate)
 	}
 	return out
+}
+
+func containsCommandStep(steps []string, command string) bool {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return false
+	}
+	for _, step := range steps {
+		if strings.TrimSpace(extractBacktickCommand(step)) == command {
+			return true
+		}
+	}
+	return false
 }
 
 func containsExact(values []string, want string) bool {

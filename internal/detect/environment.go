@@ -37,6 +37,10 @@ func Local() (models.Environment, error) {
 
 	id := osRelease["ID"]
 	ver := osRelease["VERSION_ID"]
+	kubeConfigPaths := kubeConfigPaths()
+	kubeConfig := firstKubeConfigPath(kubeConfigPaths)
+	kubeContext := kubeContext(collector)
+	kubeServer := kubeServerFromPaths(kubeConfigPaths)
 
 	return models.Environment{
 		OSID:           id,
@@ -46,31 +50,50 @@ func Local() (models.Environment, error) {
 		PackageManager: detectPackageManager(id, osRelease["ID_LIKE"]),
 		Shell:          os.Getenv("SHELL"),
 		IsRHEL9:        id == "rhel" && strings.HasPrefix(ver, "9"),
-		KubeConfig:     kubeConfigPath(),
-		KubeContext:    kubeContext(collector),
+		KubeConfig:     kubeConfig,
+		KubeContext:    kubeContext,
+		KubeServer:     kubeServer,
 		Commands:       commands,
 	}, nil
 }
 
 func kubeConfigPath() string {
-	if v := os.Getenv("KUBECONFIG"); v != "" {
-		if fileExists(v) {
-			return v
-		}
+	return firstKubeConfigPath(kubeConfigPaths())
+}
+
+func firstKubeConfigPath(paths []string) string {
+	if len(paths) == 0 {
 		return ""
+	}
+	return paths[0]
+}
+
+func kubeConfigPaths() []string {
+	if v := os.Getenv("KUBECONFIG"); v != "" {
+		var paths []string
+		for _, path := range strings.Split(v, string(os.PathListSeparator)) {
+			path = strings.TrimSpace(path)
+			if path != "" && fileExists(path) {
+				paths = append(paths, path)
+			}
+		}
+		return paths
 	}
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return ""
+		return nil
 	}
 	path := home + "/.kube/config"
 	if fileExists(path) {
-		return path
+		return []string{path}
 	}
-	return ""
+	return nil
 }
 
 func kubeContext(collector evidence.Collector) string {
+	if details := kubeDetailsFromPaths(kubeConfigPaths()); details.CurrentContext != "" {
+		return details.CurrentContext
+	}
 	if ev := collector.Lookup("kubectl"); !ev.Exists {
 		return ""
 	}
@@ -79,6 +102,22 @@ func kubeContext(collector evidence.Collector) string {
 		return ""
 	}
 	return lines[0]
+}
+
+func kubeServer(path string) string {
+	if path == "" {
+		return ""
+	}
+	return kubeServerFromPaths([]string{path})
+}
+
+func kubeServerFromPaths(paths []string) string {
+	return kubeDetailsFromPaths(paths).Server
+}
+
+func kubeDetailsFromPaths(paths []string) kubeConfigDetails {
+	details, _ := parseKubeConfigs(paths)
+	return details
 }
 
 func collectorCommandLines(script string) []string {

@@ -41,6 +41,15 @@ func TestTroubleshootPlanDiscoveryPrefersPod(t *testing.T) {
 	}
 }
 
+func TestMentionsKubernetesDoesNotTreatPodmanAsPod(t *testing.T) {
+	if mentionsKubernetes("container worker2-api why is worker 2 not up podman") {
+		t.Fatal("podman should not be treated as a Kubernetes pod mention")
+	}
+	if !mentionsKubernetes("pod worker2-api is crashlooping") {
+		t.Fatal("explicit pod token should be treated as Kubernetes")
+	}
+}
+
 func TestTargetVariantsAddsDashedForm(t *testing.T) {
 	variants := targetVariants("worker2")
 	if !containsString(variants, "worker2") || !containsString(variants, "worker-2") {

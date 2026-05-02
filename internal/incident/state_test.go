@@ -2,6 +2,7 @@ package incident
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/NdumLab/noso/internal/troubleshoot"
@@ -40,6 +41,112 @@ func TestUpdateFromTroubleshootCreatesIncident(t *testing.T) {
 	}
 	if len(record.ProbeHistory) != 1 || record.ProbeHistory[0].Command != "kubectl describe pod -n prod worker-2" {
 		t.Fatalf("ProbeHistory = %#v", record.ProbeHistory)
+	}
+}
+
+func TestUpdateFromTroubleshootRetiresStaleIncidentEvidenceAfterAdoption(t *testing.T) {
+	state := State{Incidents: []Record{{
+		ID:           "why is worker 2 not up?",
+		Query:        "why is worker 2 not up?",
+		Status:       "open",
+		StartedAt:    "2026-04-12T18:00:00Z",
+		UpdatedAt:    "2026-04-12T18:05:00Z",
+		ActiveFamily: "service",
+		ActiveTarget: "worker2",
+		LastCommand:  "systemctl status worker2 --no-pager -l",
+		LastFindings: []string{"Live service evidence: The requested unit could not be found on this host."},
+		ProbeHistory: []ProbeRecord{{
+			Timestamp: "2026-04-12T18:05:00Z",
+			Command:   "systemctl status worker2 --no-pager -l",
+			Summary:   "missing unit",
+		}},
+	}}}
+
+	thread := troubleshoot.StateThread{
+		Query:        "why is worker 2 not up?",
+		ActiveFamily: "kubernetes",
+		ActiveTarget: "worker-2",
+		History: []troubleshoot.ProbeRecord{{
+			Timestamp: "2026-04-12T18:10:00Z",
+			Command:   "kubectl describe pod worker-2",
+			Summary:   "CrashLoopBackOff event detected",
+		}},
+	}
+	response := models.Response{
+		IntentID:       "inspect_k8s_pod_describe",
+		Command:        "kubectl describe pod worker-2",
+		Explanation:    "Inspect the adopted pod directly.",
+		LikelyCauses:   []string{"High confidence: the pod is crashing repeatedly after startup"},
+		Findings:       []string{"Kubernetes evidence: The pasted pod description contains failure signals such as CrashLoopBackOff."},
+		ExpectedOutput: "A detailed pod description.",
+	}
+
+	updated := UpdateFromTroubleshoot(state, thread, response)
+	record, ok := Find(updated, "why is worker 2 not up?")
+	if !ok {
+		t.Fatal("Find() = false, want true")
+	}
+	if record.ActiveFamily != "kubernetes" || record.ActiveTarget != "worker-2" {
+		t.Fatalf("record = %#v", record)
+	}
+	if record.LastCommand != "kubectl describe pod worker-2" {
+		t.Fatalf("LastCommand = %q", record.LastCommand)
+	}
+	if len(record.LastFindings) != 1 || !strings.Contains(record.LastFindings[0], "Kubernetes evidence:") {
+		t.Fatalf("LastFindings = %#v", record.LastFindings)
+	}
+	if len(record.ProbeHistory) != 1 || record.ProbeHistory[0].Command != "kubectl describe pod worker-2" {
+		t.Fatalf("ProbeHistory = %#v", record.ProbeHistory)
+	}
+}
+
+func TestUpdateFromTroubleshootPreservesAlertSummaryForBootstrapOnlyResponse(t *testing.T) {
+	state := State{Incidents: []Record{{
+		ID:           "trial-pack|namespace=prod|pod=worker-2",
+		Query:        "worker pod alert",
+		Status:       "open",
+		Source:       "trial-pack",
+		Severity:     "critical",
+		Summary:      "worker pod is crash looping after startup",
+		StartedAt:    "2026-04-12T18:00:00Z",
+		UpdatedAt:    "2026-04-12T18:05:00Z",
+		ActiveFamily: "kubernetes",
+		ActiveTarget: "worker-2",
+		Namespace:    "prod",
+		LastSummary:  "worker pod is crash looping after startup",
+		LastCommand:  "kubectl describe pod -n prod worker-2",
+	}}}
+
+	thread := troubleshoot.StateThread{
+		Query:           "worker pod alert",
+		ActiveFamily:    "kubernetes",
+		ActiveTarget:    "worker-2",
+		ActiveNamespace: "prod",
+	}
+	response := models.Response{
+		IntentID:       "incident_bootstrap_probe",
+		Command:        "kubectl describe pod -n prod worker-2",
+		Explanation:    "Using the incident-seeded target as the first read-only troubleshoot probe.",
+		ExpectedOutput: "Initial live evidence for the incident-seeded target.",
+		Warnings:       []string{"live kubernetes probe unavailable: bash: line 1: kubectl: command not found"},
+	}
+
+	updated := UpdateFromTroubleshoot(state, thread, response)
+	record, ok := Find(updated, "worker pod alert")
+	if !ok {
+		t.Fatal("Find() = false, want true")
+	}
+	if record.LastSummary != "worker pod is crash looping after startup" {
+		t.Fatalf("LastSummary = %q", record.LastSummary)
+	}
+	if record.Summary != "worker pod is crash looping after startup" {
+		t.Fatalf("Summary = %q", record.Summary)
+	}
+	if record.Source != "trial-pack" || record.Severity != "critical" {
+		t.Fatalf("record = %#v", record)
+	}
+	if len(updated.Incidents) != 1 {
+		t.Fatalf("len(Incidents) = %d, want 1", len(updated.Incidents))
 	}
 }
 

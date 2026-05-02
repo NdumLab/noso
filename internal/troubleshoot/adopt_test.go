@@ -116,11 +116,17 @@ func TestApplySuggestedTargetResetsStaleContext(t *testing.T) {
 		LastCommand:   "systemctl status worker2 --no-pager -l",
 		Executed:      []string{"systemctl status worker2 --no-pager -l"},
 		LastDiscovery: []string{"No matching systemd unit name found for worker2."},
+		SuggestedTargets: []SuggestedTarget{{
+			Family: "service",
+			Name:   "worker@2",
+		}},
 		LastFindings:  []string{"Live service evidence: The requested unit could not be found on this host."},
 		LastWarnings:  []string{"query was ambiguous"},
 		History:       []ProbeRecord{{Command: "systemctl status worker2 --no-pager -l"}},
 		FamilyScores:  map[string]float64{"service": -1.0, "kubernetes": 1.2},
 		CauseScores:   map[string]float64{"service_unit_missing": 2.4, "service_process_failure": 0.8, "kubernetes_crashloop": 0.4},
+		ActiveContainer: "api",
+		RuntimeHint:     "podman",
 	}
 
 	updated := ApplySuggestedTarget(thread, SuggestedTarget{
@@ -134,6 +140,12 @@ func TestApplySuggestedTargetResetsStaleContext(t *testing.T) {
 	if len(updated.LastDiscovery) != 0 || len(updated.LastFindings) != 0 || len(updated.History) != 0 {
 		t.Fatalf("expected stale discovery/findings/history to be cleared: %#v", updated)
 	}
+	if len(updated.SuggestedTargets) != 0 {
+		t.Fatalf("expected stale suggested targets to be cleared: %#v", updated.SuggestedTargets)
+	}
+	if updated.ActiveContainer != "" || updated.RuntimeHint != "" {
+		t.Fatalf("expected stale container/runtime context to be cleared: %#v", updated)
+	}
 	if len(updated.LastWarnings) != 1 || updated.LastWarnings[0] != "operator adopted discovered target: worker-2 (kubernetes)" {
 		t.Fatalf("LastWarnings = %#v", updated.LastWarnings)
 	}
@@ -145,5 +157,34 @@ func TestApplySuggestedTargetResetsStaleContext(t *testing.T) {
 	}
 	if updated.CauseScores["kubernetes_crashloop"] != 0.4 {
 		t.Fatalf("CauseScores = %#v, expected compatible kubernetes cause to remain", updated.CauseScores)
+	}
+}
+
+func TestApplySuggestedTargetRuntimeClearsNamespaceContext(t *testing.T) {
+	thread := StateThread{
+		Query:           "why is worker 2 not up?",
+		ActiveFamily:    "kubernetes",
+		ActiveTarget:    "worker-2",
+		ActiveNamespace: "prod",
+		ActiveContainer: "api",
+	}
+
+	updated := ApplySuggestedTarget(thread, SuggestedTarget{
+		Family:  "runtime",
+		Name:    "worker2-api",
+		Command: "podman logs --tail 100 worker2-api",
+	})
+
+	if updated.ActiveFamily != "runtime" || updated.ActiveTarget != "worker2-api" {
+		t.Fatalf("updated = %#v", updated)
+	}
+	if updated.ActiveNamespace != "" {
+		t.Fatalf("ActiveNamespace = %q, want empty", updated.ActiveNamespace)
+	}
+	if updated.ActiveContainer != "" {
+		t.Fatalf("ActiveContainer = %q, want empty", updated.ActiveContainer)
+	}
+	if updated.RuntimeHint != "podman" {
+		t.Fatalf("RuntimeHint = %q, want podman", updated.RuntimeHint)
 	}
 }

@@ -99,6 +99,42 @@ func TestApplyThreadContextPrefersRuntimeAfterMissingService(t *testing.T) {
 	}
 }
 
+func TestApplyThreadContextDoesNotNestHistoricalPrefixes(t *testing.T) {
+	response := models.Response{
+		IntentID:    "troubleshoot_plan",
+		Command:     "systemctl status worker2 --no-pager -l",
+		Explanation: "Built a ranked, read-only troubleshoot plan.",
+	}
+	thread := StateThread{
+		Query:        "why is worker 2 not up?",
+		Executed:     []string{"systemctl status worker2 --no-pager -l"},
+		LastFindings: []string{"Previous finding: Live service evidence: The requested unit could not be found on this host."},
+		LastDiscovery: []string{
+			"Previous discovery: No matching systemd unit name found for worker2.",
+		},
+		LastWarnings: []string{"previous thread warning: runtime probe unavailable: podman is not currently installed on this host"},
+	}
+	updated := ApplyThreadContext(response, thread)
+	if !containsString(updated.Findings, "Previous finding: Live service evidence: The requested unit could not be found on this host.") {
+		t.Fatalf("Findings = %#v", updated.Findings)
+	}
+	for _, finding := range updated.Findings {
+		if strings.Contains(finding, "Previous finding: Previous finding:") {
+			t.Fatalf("Findings = %#v", updated.Findings)
+		}
+	}
+	for _, item := range updated.Discovery {
+		if strings.Contains(item, "Previous discovery: Previous discovery:") {
+			t.Fatalf("Discovery = %#v", updated.Discovery)
+		}
+	}
+	for _, warning := range updated.Warnings {
+		if strings.Contains(strings.ToLower(warning), "previous thread warning: previous thread warning:") {
+			t.Fatalf("Warnings = %#v", updated.Warnings)
+		}
+	}
+}
+
 func TestUpdateStateAccumulatesRuntimeConfidence(t *testing.T) {
 	state := UpdateState(State{}, "why is worker 2 not up?", models.Response{
 		IntentID: "troubleshoot_plan",
@@ -246,6 +282,29 @@ func TestPreviewThreadIgnoresPreviousFindingPrefixesForCauseScoring(t *testing.T
 	thread := PreviewThread(existing, existing.Query, response)
 	if thread.CauseScores["service_unit_missing"] != 0 {
 		t.Fatalf("CauseScores = %#v, expected previous finding prefix to be ignored", thread.CauseScores)
+	}
+}
+
+func TestPreviewThreadCanonicalizesHistoricalPrefixesInStoredState(t *testing.T) {
+	thread := PreviewThread(StateThread{}, "why is worker 2 not up?", models.Response{
+		Discovery: []string{"Previous discovery: No matching systemd unit name found for worker2."},
+		Findings:  []string{"Previous finding: Live service evidence: The requested unit could not be found on this host."},
+		Warnings:  []string{"previous thread warning: runtime probe unavailable: podman is not currently installed on this host"},
+	})
+	if !containsString(thread.LastDiscovery, "No matching systemd unit name found for worker2.") {
+		t.Fatalf("LastDiscovery = %#v", thread.LastDiscovery)
+	}
+	if !containsString(thread.LastFindings, "Live service evidence: The requested unit could not be found on this host.") {
+		t.Fatalf("LastFindings = %#v", thread.LastFindings)
+	}
+	if !containsString(thread.LastWarnings, "runtime probe unavailable: podman is not currently installed on this host") {
+		t.Fatalf("LastWarnings = %#v", thread.LastWarnings)
+	}
+	for _, item := range append(append([]string{}, thread.LastDiscovery...), append(thread.LastFindings, thread.LastWarnings...)...) {
+		lower := strings.ToLower(item)
+		if strings.Contains(lower, "previous discovery:") || strings.Contains(lower, "previous finding:") || strings.Contains(lower, "previous thread warning:") {
+			t.Fatalf("stored state should be canonicalized, got %#v", thread)
+		}
 	}
 }
 

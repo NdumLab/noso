@@ -74,8 +74,8 @@ func RenderHistory(records []HistoryRecord, asJSON bool) (string, error) {
 		if record.Command != "" {
 			fmt.Fprintf(&b, "Command: %s\n", record.Command)
 		}
-		if record.Summary != "" {
-			fmt.Fprintf(&b, "Summary: %s\n", record.Summary)
+		if summary := preferredHistorySummary(record); summary != "" {
+			fmt.Fprintf(&b, "Summary: %s\n", summary)
 		}
 		if len(record.Findings) > 0 {
 			fmt.Fprintf(&b, "Findings: %s\n", strings.Join(record.Findings, "; "))
@@ -88,6 +88,16 @@ func RenderHistory(records []HistoryRecord, asJSON bool) (string, error) {
 		}
 	}
 	return b.String(), nil
+}
+
+func preferredHistorySummary(record HistoryRecord) string {
+	if summary := preferredCurrentSummaryEntry(record.Findings, "Previous finding:"); summary != "" {
+		return summary
+	}
+	if summary := preferredCurrentSummaryEntry(record.Warnings, "previous thread warning:"); summary != "" {
+		return summary
+	}
+	return strings.TrimSpace(record.Summary)
 }
 
 func historyMatches(record HistoryRecord, needle string) bool {

@@ -2,7 +2,10 @@ package doctor
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
+	"time"
 
 	"github.com/NdumLab/noso/internal/config"
 	"github.com/NdumLab/noso/internal/llm"
@@ -11,6 +14,7 @@ import (
 )
 
 var coreCommands = []string{"bash", "systemctl", "ss", "find", "git"}
+var kubeAPIServerProbe = defaultKubeAPIServerProbe
 
 func Check(cfg config.Config, env models.Environment) models.Response {
 	response := models.Response{
@@ -52,6 +56,14 @@ func Check(cfg config.Config, env models.Environment) models.Response {
 		warnings = append(warnings, "core commands missing: "+strings.Join(missingCore, ", "))
 	}
 
+	if env.KubeServer != "" {
+		if err := kubeAPIServerProbe(env.KubeServer, time.Second); err != nil {
+			warnings = append(warnings, "kubernetes api server is unreachable: "+err.Error())
+		} else {
+			response.VerifiedFrom = append(response.VerifiedFrom, "kubernetes api reachability")
+		}
+	}
+
 	llmStatus, llmErr := llm.CheckHealth(cfg)
 	if cfg.LLMEnabled {
 		response.VerifiedFrom = append(response.VerifiedFrom, cfg.LLMEndpoint)
@@ -88,6 +100,12 @@ func summary(env models.Environment, cfg config.Config, warnings []string, llmSt
 			base += " Local LLM fallback is enabled."
 		}
 	}
+	if env.KubeContext != "" {
+		base += fmt.Sprintf(" Active kube context: %s.", env.KubeContext)
+	}
+	if env.KubeServer != "" {
+		base += fmt.Sprintf(" Kube API server: %s.", env.KubeServer)
+	}
 	if len(warnings) == 0 {
 		return base + " No blocking issues were detected."
 	}
@@ -105,6 +123,9 @@ func nextSteps(cfg config.Config, warnings []string) []string {
 			steps = append(steps, "Set `NOSO_AUDIT_LOG_PATH` to a writable path if you want local audit logging.")
 		case strings.Contains(warning, "core commands missing"):
 			steps = append(steps, "Install the missing core commands to restore the corresponding intent coverage.")
+		case strings.Contains(warning, "kubernetes api server is unreachable"):
+			steps = append(steps, "Check network reachability to the kube API endpoint with `nc -vz <api-server-host> <port>` and verify the control-plane listener is up.")
+			steps = append(steps, "If the cluster should be local, confirm the route or VPN path to the kube API subnet before debugging Kubernetes workloads.")
 		case strings.Contains(warning, "local llm timed out"),
 			strings.Contains(warning, "local llm is unavailable"),
 			strings.Contains(warning, "local llm upstream returned a transient failure"),
@@ -116,6 +137,26 @@ func nextSteps(cfg config.Config, warnings []string) []string {
 		steps = append(steps, "Run `cli-helper env` to inspect optional tool coverage for extended domains.")
 	}
 	return unique(steps)
+}
+
+func defaultKubeAPIServerProbe(server string, timeout time.Duration) error {
+	parsed, err := url.Parse(server)
+	if err != nil {
+		return fmt.Errorf("invalid kube api server URL %q: %w", server, err)
+	}
+	hostPort := parsed.Host
+	if hostPort == "" {
+		return fmt.Errorf("missing host in kube api server URL %q", server)
+	}
+	if _, _, err := net.SplitHostPort(hostPort); err != nil {
+		hostPort = net.JoinHostPort(hostPort, "443")
+	}
+	conn, err := net.DialTimeout("tcp", hostPort, timeout)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
 }
 
 func unique(values []string) []string {

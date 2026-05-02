@@ -150,7 +150,7 @@ func heuristicTroubleshootHypotheses(query string, env models.Environment, colle
 	}
 
 	if mentionsContainerRuntime(normalized) || (runtimeTool(env, collector) != "" && target != "" && !mentionsKubernetes(normalized)) {
-		runtime := runtimeTool(env, collector)
+		runtime := requestedRuntimeTool(query, env, collector)
 		if runtime == "" {
 			runtime = "docker"
 		}
@@ -700,8 +700,19 @@ func mentionsContainerRuntime(normalized string) bool {
 }
 
 func mentionsKubernetes(normalized string) bool {
-	for _, marker := range []string{"kubernetes", "kubectl", "k8s", "pod ", " pod", "deployment", "namespace", "crashloop", "imagepull", "pending pod"} {
+	for _, marker := range []string{"kubernetes", "kubectl", "k8s", "deployment", "namespace", "crashloop", "imagepull", "pending pod"} {
 		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return containsToken(normalized, "pod") || containsToken(normalized, "pods")
+}
+
+func containsToken(normalized, token string) bool {
+	for _, field := range strings.FieldsFunc(normalized, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-')
+	}) {
+		if field == token {
 			return true
 		}
 	}

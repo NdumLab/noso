@@ -1,0 +1,10 @@
+{
+  "query": "worker pod alert",
+  "source": "trial-pack",
+  "severity": "critical",
+  "summary": "worker pod is crash looping after startup",
+  "labels": {
+    "namespace": "prod",
+    "pod": "worker-2"
+  }
+}
